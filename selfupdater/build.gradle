@@ -1,0 +1,29 @@
+plugins {
+    id 'java-library'
+}
+
+name
+group 'space.kepler_17c'
+version '0.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes(
+                'Implementation-Title': rootProject.name,
+                'Implementation-Version': project.version
+        )
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
