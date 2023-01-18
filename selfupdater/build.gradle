@@ -2,7 +2,6 @@ plugins {
     id 'java-library'
 }
 
-name
 group 'space.kepler_17c'
 version '0.0.0'
 
