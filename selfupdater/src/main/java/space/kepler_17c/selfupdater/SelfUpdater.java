@@ -17,15 +17,29 @@ public final class SelfUpdater {
     }
 
     /**
-     * Creates a diff from two jar files and writes it to the file system.
+     * Creates a diff from two jar files using the latest diff format and writes it to a file.
      *
-     * @param oldJar          Location of the old version.
-     * @param newJar          Location of the target version.
-     * @param outputDirectory Directory where the diff shall be written to.
+     * @param oldJar    Location of the old version.
+     * @param newJar    Location of the target version.
+     * @param outputDir Directory where the diff will be written to.
+     * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
+     * @see #createDiff(File, File, File, DiffFormat)
+     */
+    public static File createDiff(File oldJar, File newJar, File outputDir) {
+        return createDiff(oldJar, newJar, outputDir, DiffFormat.LATEST);
+    }
+
+    /**
+     * Creates a diff from two jar files using the chosen diff format and writes it to a file.
+     *
+     * @param oldJar     Location of the old version.
+     * @param newJar     Location of the target version.
+     * @param outputDir  Directory where the diff shall be written to.
+     * @param diffFormat Diff format to be used.
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
      */
-    public static File createDiff(File oldJar, File newJar, File outputDirectory) {
-        throw new UnsupportedOperationException("Not implemented yet.");
+    public static File createDiff(File oldJar, File newJar, File outputDir, DiffFormat diffFormat) {
+        return diffFormat.createFunction.createDiff(oldJar, newJar, outputDir);
     }
 
     /**
