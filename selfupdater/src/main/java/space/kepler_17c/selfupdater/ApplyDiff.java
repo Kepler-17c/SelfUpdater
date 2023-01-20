@@ -1,11 +1,11 @@
 package space.kepler_17c.selfupdater;
 
-import java.io.File;
+import java.nio.file.Path;
 
 interface ApplyDiff {
-    File applyDiff(File diff, File jar);
+    Path applyDiff(Path diff, Path jar);
 
-    static File v1(File diff, File jar) {
+    static Path v1(Path diff, Path jar) {
         throw new UnsupportedOperationException("Not implemented yet.");
     }
 }

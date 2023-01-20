@@ -1,6 +1,6 @@
 package space.kepler_17c.selfupdater;
 
-import java.io.File;
+import java.nio.file.Path;
 
 /**
  * This is the interface of the library providing access to all functionality.
@@ -23,9 +23,9 @@ public final class SelfUpdater {
      * @param newJar    Location of the target version.
      * @param outputDir Directory where the diff will be written to.
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
-     * @see #createDiff(File, File, File, DiffFormat)
+     * @see #createDiff(Path, Path, Path, DiffFormat)
      */
-    public static File createDiff(File oldJar, File newJar, File outputDir) {
+    public static Path createDiff(Path oldJar, Path newJar, Path outputDir) {
         return createDiff(oldJar, newJar, outputDir, DiffFormat.LATEST);
     }
 
@@ -38,7 +38,7 @@ public final class SelfUpdater {
      * @param diffFormat Diff format to be used.
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
      */
-    public static File createDiff(File oldJar, File newJar, File outputDir, DiffFormat diffFormat) {
+    public static Path createDiff(Path oldJar, Path newJar, Path outputDir, DiffFormat diffFormat) {
         return diffFormat.createFunction.createDiff(oldJar, newJar, outputDir);
     }
 
@@ -49,7 +49,7 @@ public final class SelfUpdater {
      * @param jar  Location of the file to be updated.
      * @return The location of the updated jar file if all operations succeeded, {@code null} otherwise.
      */
-    public static File applyDiff(File diff, File jar) {
+    public static Path applyDiff(Path diff, Path jar) {
         throw new UnsupportedOperationException("Not implemented yet.");
     }
 
