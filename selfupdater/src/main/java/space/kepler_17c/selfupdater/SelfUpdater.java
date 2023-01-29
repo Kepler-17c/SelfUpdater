@@ -1,5 +1,6 @@
 package space.kepler_17c.selfupdater;
 
+import java.io.IOException;
 import java.nio.file.Path;
 
 /**
@@ -39,7 +40,12 @@ public final class SelfUpdater {
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
      */
     public static Path createDiff(Path oldJar, Path newJar, Path outputDir, DiffFormat diffFormat) {
-        return diffFormat.createFunction.createDiff(oldJar, newJar, outputDir);
+        try {
+            return diffFormat.createFunction.createDiff(oldJar, newJar, outputDir);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     /**
