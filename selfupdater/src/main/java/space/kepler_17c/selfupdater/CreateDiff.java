@@ -156,7 +156,7 @@ interface CreateDiff {
                 os.write('\n');
             }
         }
-        if (!generateMandatoryMetaFiles(workingDirectory, "1")) {
+        if (!generateMandatoryMetaFiles(workingDirectory, oldJar, newJar, "1")) {
             return null;
         }
         Path result = workingDirectory.rootDir.resolve(FileUtils.getStrippedFileName(oldJar) + "_updated.jar");
@@ -164,10 +164,11 @@ interface CreateDiff {
         return result;
     }
 
-    private static boolean generateMandatoryMetaFiles(WorkingDirectory workingDirectory, String version) {
+    private static boolean generateMandatoryMetaFiles(
+            WorkingDirectory workingDirectory, Path oldJar, Path newJar, String version) {
         String diffHash = FileUtils.hashDirectory(workingDirectory.diffData);
-        String newHash = FileUtils.hashDirectory(workingDirectory.newJar);
-        String oldHash = FileUtils.hashDirectory(workingDirectory.oldJar);
+        String newHash = FileUtils.hashFile(newJar);
+        String oldHash = FileUtils.hashFile(oldJar);
         if (diffHash == null || newHash == null || oldHash == null) {
             return false;
         }
