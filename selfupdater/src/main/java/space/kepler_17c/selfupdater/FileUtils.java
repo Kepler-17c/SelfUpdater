@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
@@ -29,41 +30,80 @@ import java.util.zip.ZipOutputStream;
 
 final class FileUtils {
     private static final int READ_BUFFER_SIZE = 1 << 20; // 2^20 = 1 MiB
-    private static final Map<UUID, WorkingDirectory> workingDirectoryMap = new HashMap<>();
-    private static final String WORKING_DIR_PREFIX = "SelfUpdate-tmp-";
+    private static final String WORKING_DIR_PREFIX = "SelfUpdater-";
+    private static final String UUID_PATTERN =
+            "\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}";
+    private static final String WORKING_DIR_PATTERN = WORKING_DIR_PREFIX + UUID_PATTERN;
     private static final String PATH_OLD = "old/";
     private static final String PATH_NEW = "new/";
     private static final String PATH_DIFF = "diff/";
     private static final String PATH_DIFF_DATA = PATH_DIFF + "data/";
     private static final String PATH_DIFF_META = PATH_DIFF + "meta/";
 
+    static {
+        // clear working from the previous run on launch
+        List<Path> staleTmpDirs;
+        try (Stream<Path> pathStream = Files.list(getSystemTmpDir())) {
+            staleTmpDirs = pathStream
+                    .filter(p -> p.getFileName().toString().matches(WORKING_DIR_PATTERN))
+                    .toList();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        for (Path dir : staleTmpDirs) {
+            if (!clearWorkingDirectory(dir)) {
+                System.err.println("Failed to clear " + dir);
+            }
+        }
+    }
+
     private FileUtils() {}
 
     static Path getRunningJarFile() {
-        return Path.of(URI.create(FileUtils.class
-                        .getProtectionDomain()
-                        .getCodeSource()
-                        .getLocation()
-                        .toString())
-                .getPath());
+        URL jarUrl = FileUtils.class.getProtectionDomain().getCodeSource().getLocation();
+        URI jarUri = URI.create(jarUrl.toString());
+        return Path.of(jarUri);
     }
 
-    private static UUID createWorkingDirectory() {
-        UUID dirId = UUID.randomUUID();
-        Path dir = getRunningJarFile().getParent().resolve(WORKING_DIR_PREFIX + dirId + "/");
-        WorkingDirectory directories;
+    public static Path getSystemTmpDir() {
+        return Path.of(System.getProperty("java.io.tmpdir"));
+    }
+
+    public static Path createTmpDir() {
+        Path tmpDir = getSystemTmpDir().resolve(WORKING_DIR_PREFIX + UUID.randomUUID());
         try {
-            directories = WorkingDirectory.fromPath(dir);
+            Files.createDirectory(tmpDir);
+        } catch (IOException e) {
+            return null;
+        }
+        return tmpDir;
+    }
+
+    static WorkingDirectory prepareWorkingDirectory(Path oldJar, Path newJar, Path diff) {
+        if (oldJar != null && !Files.isRegularFile(oldJar)
+                || newJar != null && !Files.isRegularFile(newJar)
+                || diff != null && !Files.isRegularFile(diff)) {
+            return null;
+        }
+        WorkingDirectory wd;
+        try {
+            wd = WorkingDirectory.fromPath(createTmpDir());
+        } catch (IOException e) {
+            return null;
+        }
+        try {
+            extractJar(oldJar, wd.oldJar);
+            extractJar(newJar, wd.newJar);
+            extractJar(diff, wd.diff);
         } catch (IOException e) {
             e.printStackTrace();
             return null;
         }
-        workingDirectoryMap.put(dirId, directories);
-        return dirId;
+        return wd;
     }
 
-    private static boolean clearWorkingDirectory(UUID dirId) {
-        if (!workingDirectoryMap.containsKey(dirId)) {
+    public static boolean clearWorkingDirectory(Path rootDir) {
+        if (!Files.isDirectory(rootDir)) {
             return true;
         }
         FileVisitor<Path> fileDeletionVisitor = new SimpleFileVisitor<>() {
@@ -82,40 +122,12 @@ final class FileUtils {
                 return FileVisitResult.CONTINUE;
             }
         };
-        Path rootDir = workingDirectoryMap.get(dirId).rootDir;
         try {
             Files.walkFileTree(rootDir, fileDeletionVisitor);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        if (Files.isDirectory(rootDir)) {
-            return false;
-        } else {
-            workingDirectoryMap.remove(dirId);
-            return true;
-        }
-    }
-
-    static WorkingDirectory prepareWorkingDirectory(Path oldJar, Path newJar, Path diff) {
-        if (oldJar != null && !Files.isRegularFile(oldJar)
-                || newJar != null && !Files.isRegularFile(newJar)
-                || diff != null && !Files.isRegularFile(diff)) {
-            return null;
-        }
-        UUID dirId = createWorkingDirectory();
-        if (dirId == null) {
-            return null;
-        }
-        WorkingDirectory wd = workingDirectoryMap.get(dirId);
-        try {
-            extractJar(oldJar, wd.oldJar);
-            extractJar(newJar, wd.newJar);
-            extractJar(diff, wd.diff);
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
-        return wd;
+        return !Files.isDirectory(rootDir);
     }
 
     private static void extractJar(Path jar, Path targetDirectory) throws IOException {
@@ -162,6 +174,40 @@ final class FileUtils {
         };
         Files.walkFileTree(sourceDirectory, zipWritingFileVisitor);
         zos.close();
+    }
+
+    static boolean generateMandatoryMetaFiles(WorkingDirectory workingDirectory, String version) {
+        String diffHash = FileUtils.hashDirectory(workingDirectory.diffData);
+        String newHash = FileUtils.hashDirectory(workingDirectory.newJar);
+        String oldHash = FileUtils.hashDirectory(workingDirectory.oldJar);
+        if (diffHash == null || newHash == null || oldHash == null) {
+            return false;
+        }
+        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("diffHash"))) {
+            os.write(diffHash.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("newHash"))) {
+            os.write(newHash.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("oldHash"))) {
+            os.write(oldHash.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("version"))) {
+            os.write(version.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+        return true;
     }
 
     static Map<String, String> getDiffMetaData(WorkingDirectory workingDirectory) throws IOException {
@@ -306,6 +352,10 @@ final class FileUtils {
             Files.createDirectories(newJar);
             Files.createDirectories(diffData);
             Files.createDirectories(diffMeta);
+        }
+
+        public boolean clear() {
+            return clearWorkingDirectory(rootDir);
         }
     }
 }

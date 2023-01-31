@@ -156,45 +156,14 @@ interface CreateDiff {
                 os.write('\n');
             }
         }
-        if (!generateMandatoryMetaFiles(workingDirectory, "1")) {
+        if (!FileUtils.generateMandatoryMetaFiles(workingDirectory, "1")) {
             return null;
         }
         Path result = outputDir.resolve(FileUtils.getStrippedFileName(oldJar) + "_updated.jar");
         FileUtils.zipJar(workingDirectory.diff, result);
+        if (!workingDirectory.clear()) {
+            return null;
+        }
         return result;
-    }
-
-    private static boolean generateMandatoryMetaFiles(WorkingDirectory workingDirectory, String version) {
-        String diffHash = FileUtils.hashDirectory(workingDirectory.diffData);
-        String newHash = FileUtils.hashDirectory(workingDirectory.newJar);
-        String oldHash = FileUtils.hashDirectory(workingDirectory.oldJar);
-        if (diffHash == null || newHash == null || oldHash == null) {
-            return false;
-        }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("diffHash"))) {
-            os.write(diffHash.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("newHash"))) {
-            os.write(newHash.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("oldHash"))) {
-            os.write(oldHash.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("version"))) {
-            os.write(version.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        return true;
     }
 }
