@@ -159,7 +159,7 @@ interface CreateDiff {
         if (!generateMandatoryMetaFiles(workingDirectory, oldJar, newJar, "1")) {
             return null;
         }
-        Path result = workingDirectory.rootDir.resolve(FileUtils.getStrippedFileName(oldJar) + "_updated.jar");
+        Path result = outputDir.resolve(FileUtils.getStrippedFileName(oldJar) + "_updated.jar");
         FileUtils.zipJar(workingDirectory.diff, result);
         return result;
     }
