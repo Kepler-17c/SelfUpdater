@@ -252,7 +252,7 @@ final class FileUtils {
         byte[] readBuffer = new byte[READ_BUFFER_SIZE];
         int bytesCount;
         try (InputStream inputStream = Files.newInputStream(file)) {
-            while ((bytesCount = inputStream.read(readBuffer)) != 0) {
+            while ((bytesCount = inputStream.read(readBuffer)) > 0) {
                 sha256.update(readBuffer, 0, bytesCount);
             }
         } catch (IOException e) {
@@ -288,7 +288,7 @@ final class FileUtils {
                     pushFilesReversed(fileStack, tmp);
                 } else if (Files.isRegularFile(tmp)) {
                     try (InputStream inputStream = Files.newInputStream(tmp)) {
-                        while ((bytesCount = inputStream.read(readBuffer)) != 0) {
+                        while ((bytesCount = inputStream.read(readBuffer)) > 0) {
                             sha256.update(readBuffer, 0, bytesCount);
                         }
                     }
@@ -321,7 +321,7 @@ final class FileUtils {
             byte[] bufferB = new byte[READ_BUFFER_SIZE];
             int receivedA;
             int receivedB;
-            while ((receivedA = inA.read(bufferA)) != 0 | (receivedB = inB.read(bufferB)) != 0) {
+            while ((receivedA = inA.read(bufferA)) > 0 | (receivedB = inB.read(bufferB)) > 0) {
                 if (receivedA != receivedB || Arrays.compare(bufferA, bufferB) != 0) {
                     return false;
                 }
