@@ -160,7 +160,7 @@ interface CreateDiff {
             return null;
         }
         Path result = outputDir.resolve(FileUtils.getStrippedFileName(oldJar) + "_updated.jar");
-        FileUtils.zipJar(workingDirectory.diff, result);
+        FileUtils.zipDir(workingDirectory.diff, result);
         if (!workingDirectory.clear()) {
             return null;
         }

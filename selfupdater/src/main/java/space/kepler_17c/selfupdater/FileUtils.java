@@ -134,14 +134,17 @@ final class FileUtils {
         if (jar == null) {
             return;
         }
-        Files.createDirectory(targetDirectory);
+        if (!Files.isDirectory(targetDirectory)) {
+            Files.createDirectories(targetDirectory);
+        }
         ZipInputStream zis = new ZipInputStream(Files.newInputStream(jar));
         ZipEntry ze;
         while ((ze = zis.getNextEntry()) != null) {
-            Path entryFile = targetDirectory.resolve(ze.getName());
-            if (Files.isDirectory(entryFile)) {
+            String entryName = ze.getName();
+            Path entryFile = targetDirectory.resolve(entryName);
+            if (entryName.endsWith("/")) {
                 Files.createDirectories(entryFile);
-            } else if (Files.isRegularFile(entryFile)) {
+            } else {
                 OutputStream outputStream = Files.newOutputStream(entryFile);
                 outputStream.write(zis.readAllBytes());
                 outputStream.close();
@@ -150,12 +153,20 @@ final class FileUtils {
         zis.close();
     }
 
-    public static void zipJar(Path sourceDirectory, Path jar) throws IOException {
+    public static void zipDir(Path sourceDirectory, Path jar) throws IOException {
         ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(jar));
         FileVisitor<Path> zipWritingFileVisitor = new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                ZipEntry ze = new ZipEntry(sourceDirectory.relativize(dir).toString());
+                String dirString = sourceDirectory.relativize(dir).toString();
+                if (dirString.isEmpty()) {
+                    return FileVisitResult.CONTINUE;
+                }
+                dirString = dirString.replace("\\", "/");
+                if (!dirString.endsWith("/")) {
+                    dirString += "/";
+                }
+                ZipEntry ze = new ZipEntry(dirString);
                 zos.putNextEntry(ze);
                 zos.closeEntry();
                 return FileVisitResult.CONTINUE;
