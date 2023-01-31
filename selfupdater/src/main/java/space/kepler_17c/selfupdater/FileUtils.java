@@ -330,6 +330,37 @@ final class FileUtils {
         }
     }
 
+    static boolean equalDirectories(Path a, Path b) throws IOException {
+        if (Files.isDirectory(a) && Files.isDirectory(b)) {
+            List<Path> listA;
+            List<Path> listB;
+            try (Stream<Path> streamA = Files.list(a);
+                    Stream<Path> streamB = Files.list(b)) {
+                listA = streamA.sorted().toList();
+                listB = streamB.sorted().toList();
+            }
+            if (listA.size() != listB.size()) {
+                return false;
+            }
+            for (int i = 0; i < listA.size(); i++) {
+                if (!listA.get(i)
+                        .getFileName()
+                        .toString()
+                        .equals(listB.get(i).getFileName().toString())) {
+                    return false;
+                }
+                if (!equalDirectories(listA.get(i), listB.get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        } else if (Files.isRegularFile(a) && Files.isRegularFile(b)) {
+            return equalFiles(a, b);
+        } else {
+            return false;
+        }
+    }
+
     static String getStrippedFileName(Path file) {
         String rawName = file.getFileName().toString();
         return rawName.substring(0, rawName.lastIndexOf("."));
