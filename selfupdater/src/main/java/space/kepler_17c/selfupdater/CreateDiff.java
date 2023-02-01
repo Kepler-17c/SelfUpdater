@@ -102,6 +102,7 @@ interface CreateDiff {
                     diffFile = workingDirectory.newJar.relativize(newFile);
                     if (!movedDestFiles.contains(diffFile.toString())) {
                         diffFile = workingDirectory.diffData.resolve(diffFile);
+                        Files.createDirectories(diffFile.getParent());
                         Files.copy(newFile, diffFile);
                     }
                     newFilesStack.pop();
@@ -118,7 +119,7 @@ interface CreateDiff {
             newFileRel = workingDirectory.newJar.relativize(newFile);
             String oldRelString = oldFileRel.toString();
             String newRelString = newFileRel.toString();
-            diffFile = workingDirectory.diff.resolve("tree/").resolve(newFileRel);
+            diffFile = workingDirectory.diffData.resolve("tree").resolve(newFileRel);
             if (oldRelString.compareTo(newRelString) < 0) {
                 // [old] is before [new] alphabetically => [new] skipped a file => mark as deleted
                 deletedFiles.add(oldRelString);
@@ -126,12 +127,14 @@ interface CreateDiff {
             } else if (oldRelString.compareTo(newRelString) > 0) {
                 // [old] is after [new] alphabetically => [old] skipped a file => add new file
                 if (!movedDestFiles.contains(newFileRel.toString())) {
+                    Files.createDirectories(diffFile.getParent());
                     Files.copy(newFile, diffFile);
                 }
                 newFilesStack.pop();
             } else if (oldRelString.equals(newRelString)) {
                 // [old] and [new] have equal paths => compare files and add new if changed
                 if (!movedDestFiles.contains(newFileRel.toString()) && !FileUtils.equalFiles(newFile, oldFile)) {
+                    Files.createDirectories(diffFile.getParent());
                     Files.copy(newFile, diffFile);
                 }
                 oldFilesStack.pop();
@@ -159,7 +162,7 @@ interface CreateDiff {
         if (!FileUtils.generateMandatoryMetaFiles(workingDirectory, "1")) {
             return null;
         }
-        Path result = outputDir.resolve(FileUtils.getStrippedFileName(oldJar) + "_updated.jar");
+        Path result = outputDir.resolve(FileUtils.getStrippedFileName(oldJar) + ".jardiff");
         FileUtils.zipDir(workingDirectory.diff, result);
         if (!workingDirectory.clear()) {
             return null;

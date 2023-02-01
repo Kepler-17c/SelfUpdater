@@ -154,19 +154,22 @@ final class FileUtils {
     }
 
     public static void zipDir(Path sourceDirectory, Path jar) throws IOException {
+        if (!Files.isDirectory(sourceDirectory)) {
+            return;
+        }
         ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(jar));
         FileVisitor<Path> zipWritingFileVisitor = new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                String dirString = sourceDirectory.relativize(dir).toString();
-                if (dirString.isEmpty()) {
+                String pathString = sourceDirectory.relativize(dir).toString();
+                if (pathString.isEmpty()) {
                     return FileVisitResult.CONTINUE;
                 }
-                dirString = dirString.replace("\\", "/");
-                if (!dirString.endsWith("/")) {
-                    dirString += "/";
+                pathString = pathString.replace("\\", "/");
+                if (!pathString.endsWith("/")) {
+                    pathString += "/";
                 }
-                ZipEntry ze = new ZipEntry(dirString);
+                ZipEntry ze = new ZipEntry(pathString);
                 zos.putNextEntry(ze);
                 zos.closeEntry();
                 return FileVisitResult.CONTINUE;
@@ -174,7 +177,9 @@ final class FileUtils {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                ZipEntry ze = new ZipEntry(sourceDirectory.relativize(file).toString());
+                String pathString = sourceDirectory.relativize(file).toString();
+                pathString = pathString.replace("\\", "/");
+                ZipEntry ze = new ZipEntry(pathString);
                 zos.putNextEntry(ze);
                 InputStream inputStream = Files.newInputStream(file);
                 zos.write(inputStream.readAllBytes());
@@ -327,37 +332,6 @@ final class FileUtils {
                 }
             }
             return true;
-        }
-    }
-
-    static boolean equalDirectories(Path a, Path b) throws IOException {
-        if (Files.isDirectory(a) && Files.isDirectory(b)) {
-            List<Path> listA;
-            List<Path> listB;
-            try (Stream<Path> streamA = Files.list(a);
-                    Stream<Path> streamB = Files.list(b)) {
-                listA = streamA.sorted().toList();
-                listB = streamB.sorted().toList();
-            }
-            if (listA.size() != listB.size()) {
-                return false;
-            }
-            for (int i = 0; i < listA.size(); i++) {
-                if (!listA.get(i)
-                        .getFileName()
-                        .toString()
-                        .equals(listB.get(i).getFileName().toString())) {
-                    return false;
-                }
-                if (!equalDirectories(listA.get(i), listB.get(i))) {
-                    return false;
-                }
-            }
-            return true;
-        } else if (Files.isRegularFile(a) && Files.isRegularFile(b)) {
-            return equalFiles(a, b);
-        } else {
-            return false;
         }
     }
 

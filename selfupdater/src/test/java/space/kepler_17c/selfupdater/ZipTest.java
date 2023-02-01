@@ -18,7 +18,7 @@ public class ZipTest {
         invokePrivateMethod(FileUtils.class, "extractJar", new Class<?>[] {Path.class, Path.class}, new Object[] {
             tmpDir.resolve("test.jar"), tmpDir.resolve("extracted")
         });
-        Assertions.assertTrue(FileUtils.equalDirectories(dir, tmpDir.resolve("extracted")));
+        Assertions.assertTrue(TestUtils.equalDirectories(dir, tmpDir.resolve("extracted")));
         FileUtils.clearWorkingDirectory(tmpDir);
     }
 }
