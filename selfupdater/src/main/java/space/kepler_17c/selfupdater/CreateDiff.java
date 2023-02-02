@@ -43,7 +43,7 @@ interface CreateDiff {
                 return super.visitFile(file, attrs);
             }
         };
-        Files.walkFileTree(oldJar, hashingFileVisitor);
+        Files.walkFileTree(workingDirectory.oldJar, hashingFileVisitor);
         List<Tuple2<String, String>> movedFiles = new ArrayList<>();
         FileVisitor<Path> comparingFileVisitor = new SimpleFileVisitor<>() {
             @Override
@@ -64,7 +64,7 @@ interface CreateDiff {
                 return super.visitFile(file, attrs);
             }
         };
-        Files.walkFileTree(newJar, comparingFileVisitor);
+        Files.walkFileTree(workingDirectory.newJar, comparingFileVisitor);
         Set<String> movedDestFiles = new HashSet<>();
         for (Tuple2<String, String> filePair : movedFiles) {
             movedDestFiles.add(filePair.b());
@@ -80,6 +80,8 @@ interface CreateDiff {
         Path newFileRel;
         Path diffFile;
         List<String> deletedFiles = new ArrayList<>();
+        Path diffTreeRoot = workingDirectory.diffData.resolve("tree");
+        Files.createDirectories(diffTreeRoot);
         while (true) {
             // ensure top path denotes a file
             while (!oldFilesStack.isEmpty() && Files.isDirectory(oldFilesStack.peek())) {
@@ -119,7 +121,7 @@ interface CreateDiff {
             newFileRel = workingDirectory.newJar.relativize(newFile);
             String oldRelString = oldFileRel.toString();
             String newRelString = newFileRel.toString();
-            diffFile = workingDirectory.diffData.resolve("tree").resolve(newFileRel);
+            diffFile = diffTreeRoot.resolve(newFileRel);
             if (oldRelString.compareTo(newRelString) < 0) {
                 // [old] is before [new] alphabetically => [new] skipped a file => mark as deleted
                 deletedFiles.add(oldRelString);
@@ -144,19 +146,19 @@ interface CreateDiff {
             }
         }
         Path deletedFilesMeta = workingDirectory.diffData.resolve("deletedFiles");
-        try (OutputStream os = Files.newOutputStream(deletedFilesMeta)) {
+        try (OutputStream outputStream = Files.newOutputStream(deletedFilesMeta)) {
             for (String line : deletedFiles) {
-                os.write(line.getBytes(StandardCharsets.UTF_8));
-                os.write('\n');
+                outputStream.write(line.replace("\\", "/").getBytes(StandardCharsets.UTF_8));
+                outputStream.write('\n');
             }
         }
         Path movedFilesMeta = workingDirectory.diffData.resolve("movedFiles");
-        try (OutputStream os = Files.newOutputStream(movedFilesMeta)) {
+        try (OutputStream outputStream = Files.newOutputStream(movedFilesMeta)) {
             for (Tuple2<String, String> filePair : movedFiles) {
-                os.write(filePair.a().getBytes(StandardCharsets.UTF_8));
-                os.write('\n');
-                os.write(filePair.b().getBytes(StandardCharsets.UTF_8));
-                os.write('\n');
+                outputStream.write(filePair.a().replace("\\", "/").getBytes(StandardCharsets.UTF_8));
+                outputStream.write('\n');
+                outputStream.write(filePair.b().replace("\\", "/").getBytes(StandardCharsets.UTF_8));
+                outputStream.write('\n');
             }
         }
         if (!FileUtils.generateMandatoryMetaFiles(workingDirectory, "1")) {

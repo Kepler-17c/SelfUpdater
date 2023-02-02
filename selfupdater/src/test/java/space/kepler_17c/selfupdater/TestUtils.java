@@ -1,6 +1,8 @@
 package space.kepler_17c.selfupdater;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -74,15 +76,24 @@ public class TestUtils {
             int receivedB;
             while ((zeA = zisA.getNextEntry()) != null && (zeB = zisB.getNextEntry()) != null) {
                 if (!zeA.getName().equals(zeB.getName())) {
+                    System.err.println("Jar Comparison Failed: Mismatching names");
                     return false;
                 }
                 while ((receivedA = zisA.read(bufferA)) > 0 | (receivedB = zisB.read(bufferB)) > 0) {
                     if (receivedA != receivedB || Arrays.compare(bufferA, bufferB) != 0) {
+                        System.err.println("Jar Comparison Failed: Mismatching data");
+                        byte[] subA = new byte[Math.max(receivedA, 0)];
+                        byte[] subB = new byte[Math.max(receivedB, 0)];
+                        System.arraycopy(bufferA, 0, subA, 0, Math.max(receivedA, 0));
+                        System.arraycopy(bufferB, 0, subB, 0, Math.max(receivedB, 0));
+                        System.err.println(new String(subA));
+                        System.err.println(new String(subB));
                         return false;
                     }
                 }
             }
             if (zisA.getNextEntry() != null || zisB.getNextEntry() != null) {
+                System.err.println("Jar Comparison Failed: Differing entry count");
                 return false;
             }
         } catch (IOException e) {
@@ -90,5 +101,53 @@ public class TestUtils {
             return false;
         }
         return true;
+    }
+
+    static void printJar(Path jar) {
+        printJar(jar, System.out);
+    }
+
+    static void printJar(Path jar, PrintStream printStream) {
+        try (InputStream inputStream = Files.newInputStream(jar);
+                ZipInputStream zis = new ZipInputStream(inputStream)) {
+            ZipEntry ze;
+            int maxPreviewLength = 1 << 10;
+            byte[] buffer = new byte[maxPreviewLength];
+            int bytesRead;
+            byte[] croppedBuffer;
+            String printName = "### " + jar.getFileName() + " ###";
+            String border = pad("", "#", printName.length());
+            printStream.println(border);
+            printStream.println(printName);
+            printStream.println(border);
+            while ((ze = zis.getNextEntry()) != null) {
+                printStream.println("### " + ze + " ###");
+                bytesRead = zis.read(buffer);
+                if (bytesRead == -1) {
+                    continue;
+                }
+                croppedBuffer = new byte[Math.min(bytesRead, buffer.length)];
+                System.arraycopy(buffer, 0, croppedBuffer, 0, croppedBuffer.length);
+                printStream.println(new String(croppedBuffer));
+            }
+            printStream.println(border);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    static String pad(String base, String padSequence, int size) {
+        boolean padLeft = size < 0;
+        size = Math.abs(size);
+        String padding = "";
+        for (int i = 0; i < (size - base.length()) / padSequence.length(); i++) {
+            padding += padSequence;
+        }
+        int missingLength = size - base.length() - padding.length();
+        if (padLeft) {
+            return padSequence.substring(padSequence.length() - missingLength) + padding + base;
+        } else {
+            return base + padding + padSequence.substring(0, missingLength);
+        }
     }
 }

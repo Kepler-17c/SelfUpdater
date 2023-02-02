@@ -199,26 +199,26 @@ final class FileUtils {
         if (diffHash == null || newHash == null || oldHash == null) {
             return false;
         }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("diffHash"))) {
-            os.write(diffHash.getBytes(StandardCharsets.UTF_8));
+        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("diffHash"))) {
+            outputStream.write(diffHash.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             e.printStackTrace();
             return false;
         }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("newHash"))) {
-            os.write(newHash.getBytes(StandardCharsets.UTF_8));
+        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("newHash"))) {
+            outputStream.write(newHash.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             e.printStackTrace();
             return false;
         }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("oldHash"))) {
-            os.write(oldHash.getBytes(StandardCharsets.UTF_8));
+        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("oldHash"))) {
+            outputStream.write(oldHash.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             e.printStackTrace();
             return false;
         }
-        try (OutputStream os = Files.newOutputStream(workingDirectory.diffMeta.resolve("version"))) {
-            os.write(version.getBytes(StandardCharsets.UTF_8));
+        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("version"))) {
+            outputStream.write(version.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             e.printStackTrace();
             return false;
@@ -272,7 +272,7 @@ final class FileUtils {
     }
 
     static String hashDirectory(Path dir) {
-        MessageDigest sha256 = null;
+        MessageDigest sha256;
         try {
             sha256 = MessageDigest.getInstance("SHA256");
         } catch (NoSuchAlgorithmException e) {
