@@ -14,7 +14,9 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -27,6 +29,7 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
+import space.kepler_17c.selfupdater.MiscUtils.Tuple2;
 
 final class FileUtils {
     private static final int READ_BUFFER_SIZE = 1 << 20; // 2^20 = 1 MiB
@@ -39,20 +42,24 @@ final class FileUtils {
     private static final String PATH_DIFF = "diff/";
     private static final String PATH_DIFF_DATA = PATH_DIFF + "data/";
     private static final String PATH_DIFF_META = PATH_DIFF + "meta/";
+    static final String DIFF_FILE_TYPE = "jardiff";
+    static final String UPDATED_FILE_NAME = "updated.jar";
 
     static {
         // clear working from the previous run on launch
-        List<Path> staleTmpDirs;
+        List<Path> staleTmpDirs = Collections.emptyList();
         try (Stream<Path> pathStream = Files.list(getSystemTmpDir())) {
             staleTmpDirs = pathStream
                     .filter(p -> p.getFileName().toString().matches(WORKING_DIR_PATTERN))
                     .toList();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
         for (Path dir : staleTmpDirs) {
-            if (!clearWorkingDirectory(dir)) {
-                System.err.println("Failed to clear " + dir);
+            try {
+                clearWorkingDirectory(dir);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -69,43 +76,26 @@ final class FileUtils {
         return Path.of(System.getProperty("java.io.tmpdir"));
     }
 
-    public static Path createTmpDir() {
+    public static Path createTmpDir() throws IOException {
         Path tmpDir = getSystemTmpDir().resolve(WORKING_DIR_PREFIX + UUID.randomUUID());
-        try {
-            Files.createDirectory(tmpDir);
-        } catch (IOException e) {
-            return null;
-        }
+        Files.createDirectory(tmpDir);
         return tmpDir;
     }
 
-    static WorkingDirectory prepareWorkingDirectory(Path oldJar, Path newJar, Path diff) {
+    static WorkingDirectory prepareWorkingDirectory(Path oldJar, Path newJar, Path diff) throws IOException {
         if (oldJar != null && !Files.isRegularFile(oldJar)
                 || newJar != null && !Files.isRegularFile(newJar)
                 || diff != null && !Files.isRegularFile(diff)) {
-            return null;
+            throw new IOException("Paths contain non-regular files.");
         }
-        WorkingDirectory wd;
-        try {
-            wd = WorkingDirectory.fromPath(createTmpDir());
-        } catch (IOException e) {
-            return null;
-        }
-        try {
-            extractJar(oldJar, wd.oldJar);
-            extractJar(newJar, wd.newJar);
-            extractJar(diff, wd.diff);
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
+        WorkingDirectory wd = WorkingDirectory.fromPath(createTmpDir());
+        extractJar(oldJar, wd.oldFiles);
+        extractJar(newJar, wd.newFiles);
+        extractJar(diff, wd.diffRoot);
         return wd;
     }
 
-    public static boolean clearWorkingDirectory(Path rootDir) {
-        if (!Files.isDirectory(rootDir)) {
-            return true;
-        }
+    public static void clearWorkingDirectory(Path rootDir) throws IOException {
         FileVisitor<Path> fileDeletionVisitor = new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
@@ -122,12 +112,7 @@ final class FileUtils {
                 return FileVisitResult.CONTINUE;
             }
         };
-        try {
-            Files.walkFileTree(rootDir, fileDeletionVisitor);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return !Files.isDirectory(rootDir);
+        Files.walkFileTree(rootDir, fileDeletionVisitor);
     }
 
     private static void extractJar(Path jar, Path targetDirectory) throws IOException {
@@ -165,10 +150,7 @@ final class FileUtils {
                 if (pathString.isEmpty()) {
                     return FileVisitResult.CONTINUE;
                 }
-                pathString = pathString.replace("\\", "/");
-                if (!pathString.endsWith("/")) {
-                    pathString += "/";
-                }
+                pathString = normalisedDirString(pathString);
                 ZipEntry ze = new ZipEntry(pathString);
                 zos.putNextEntry(ze);
                 zos.closeEntry();
@@ -177,8 +159,7 @@ final class FileUtils {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                String pathString = sourceDirectory.relativize(file).toString();
-                pathString = pathString.replace("\\", "/");
+                String pathString = normalisedPathString(sourceDirectory.relativize(file));
                 ZipEntry ze = new ZipEntry(pathString);
                 zos.putNextEntry(ze);
                 InputStream inputStream = Files.newInputStream(file);
@@ -192,66 +173,49 @@ final class FileUtils {
         zos.close();
     }
 
-    static boolean generateMandatoryMetaFiles(WorkingDirectory workingDirectory, String version) {
-        String diffHash = FileUtils.hashDirectory(workingDirectory.diffData);
-        String newHash = FileUtils.hashDirectory(workingDirectory.newJar);
-        String oldHash = FileUtils.hashDirectory(workingDirectory.oldJar);
-        if (diffHash == null || newHash == null || oldHash == null) {
-            return false;
+    static void generateMandatoryMetaFiles(WorkingDirectory workingDirectory, String version) throws IOException {
+        String diffHash = FileUtils.hashDirectory(workingDirectory.diffDataFiles);
+        String newHash = FileUtils.hashDirectory(workingDirectory.newFiles);
+        String oldHash = FileUtils.hashDirectory(workingDirectory.oldFiles);
+        List<Tuple2<String, String>> entries = new ArrayList<>();
+        entries.add(new Tuple2<>("diffHash", diffHash));
+        entries.add(new Tuple2<>("newHash", newHash));
+        entries.add(new Tuple2<>("oldHash", oldHash));
+        entries.add(new Tuple2<>("version", version));
+        for (Tuple2<String, String> e : entries) {
+            try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMetaFiles.resolve(e.a()))) {
+                outputStream.write(e.b().getBytes(StandardCharsets.UTF_8));
+            }
         }
-        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("diffHash"))) {
-            outputStream.write(diffHash.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("newHash"))) {
-            outputStream.write(newHash.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("oldHash"))) {
-            outputStream.write(oldHash.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        try (OutputStream outputStream = Files.newOutputStream(workingDirectory.diffMeta.resolve("version"))) {
-            outputStream.write(version.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-        return true;
     }
 
-    static Map<String, String> getDiffMetaData(WorkingDirectory workingDirectory) throws IOException {
-        Map<String, String> result = new HashMap<>();
+    static DiffMetaData getDiffMetaData(WorkingDirectory workingDirectory) throws IOException {
+        Map<String, String> presentMetaData = new HashMap<>();
         List<Path> metaFiles;
-        try (Stream<Path> pathStream = Files.list(workingDirectory.diffMeta)) {
+        try (Stream<Path> pathStream = Files.list(workingDirectory.diffMetaFiles)) {
             metaFiles = pathStream.toList();
         }
         for (Path file : metaFiles) {
             try (InputStream inputStream = Files.newInputStream(file)) {
                 byte[] dataBytes = inputStream.readAllBytes();
                 String dataString = dataBytes == null ? null : new String(dataBytes);
-                result.put(file.getFileName().toString(), dataString);
-            } catch (IOException e) {
-                e.printStackTrace();
-                return null;
+                presentMetaData.put(file.getFileName().toString(), dataString);
             }
         }
-        return result;
+        return new DiffMetaData(
+                presentMetaData.get("diffHash"),
+                presentMetaData.get("oldHash"),
+                presentMetaData.get("newHash"),
+                presentMetaData.get("version"));
     }
 
-    static String hashFile(Path file) {
-        MessageDigest sha256 = null;
+    static String hashFile(Path file) throws IOException {
+        MessageDigest sha256;
         try {
-            sha256 = MessageDigest.getInstance("SHA256");
+            sha256 = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return null;
+            // SHA-256 is required to be present on all implementations
+            throw new RuntimeException(e);
         }
         byte[] hashBytes;
         byte[] readBuffer = new byte[READ_BUFFER_SIZE];
@@ -260,9 +224,6 @@ final class FileUtils {
             while ((bytesCount = inputStream.read(readBuffer)) > 0) {
                 sha256.update(readBuffer, 0, bytesCount);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
         }
         hashBytes = sha256.digest();
         return IntStream.range(0, hashBytes.length)
@@ -271,37 +232,35 @@ final class FileUtils {
                 .collect(Collectors.joining());
     }
 
-    static String hashDirectory(Path dir) {
+    static String hashDirectory(Path dir) throws IOException {
         MessageDigest sha256;
         try {
-            sha256 = MessageDigest.getInstance("SHA256");
+            sha256 = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return null;
+            // SHA-256 is required to be present on all implementations
+            throw new RuntimeException(e);
         }
         byte[] readBuffer = new byte[READ_BUFFER_SIZE];
         byte[] hashBytes;
         int bytesCount;
         Stack<Path> fileStack = new Stack<>();
-        Path tmp;
-        try {
-            pushFilesReversed(fileStack, dir);
-            while (!fileStack.isEmpty()) {
-                tmp = fileStack.pop();
-                sha256.update(dir.relativize(tmp).toString().getBytes(StandardCharsets.UTF_8));
-                if (Files.isDirectory(tmp)) {
-                    pushFilesReversed(fileStack, tmp);
-                } else if (Files.isRegularFile(tmp)) {
-                    try (InputStream inputStream = Files.newInputStream(tmp)) {
-                        while ((bytesCount = inputStream.read(readBuffer)) > 0) {
-                            sha256.update(readBuffer, 0, bytesCount);
-                        }
+        Path absPath, relPath;
+        String pathString;
+        pushFilesReversed(fileStack, dir);
+        while (!fileStack.isEmpty()) {
+            absPath = fileStack.pop();
+            relPath = dir.relativize(absPath);
+            pathString = Files.isDirectory(absPath) ? normalisedDirString(relPath) : normalisedPathString(relPath);
+            sha256.update(pathString.getBytes(StandardCharsets.UTF_8));
+            if (Files.isDirectory(absPath)) {
+                pushFilesReversed(fileStack, absPath);
+            } else if (Files.isRegularFile(absPath)) {
+                try (InputStream inputStream = Files.newInputStream(absPath)) {
+                    while ((bytesCount = inputStream.read(readBuffer)) > 0) {
+                        sha256.update(readBuffer, 0, bytesCount);
                     }
                 }
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
         }
         hashBytes = sha256.digest();
         return IntStream.range(0, hashBytes.length)
@@ -340,21 +299,41 @@ final class FileUtils {
         return rawName.substring(0, rawName.lastIndexOf("."));
     }
 
+    static String normalisedPathString(Path path) {
+        return normalisedPathString(path.toString());
+    }
+
+    static String normalisedPathString(String path) {
+        return path.replace("\\", "/");
+    }
+
+    static String normalisedDirString(Path dir) {
+        return normalisedDirString(dir.toString());
+    }
+
+    static String normalisedDirString(String dir) {
+        String normalised = normalisedPathString(dir);
+        if (!normalised.endsWith("/")) {
+            normalised += "/";
+        }
+        return normalised;
+    }
+
     static final class WorkingDirectory {
         final Path rootDir;
-        final Path oldJar;
-        final Path newJar;
-        final Path diff;
-        final Path diffData;
-        final Path diffMeta;
+        final Path oldFiles;
+        final Path newFiles;
+        final Path diffRoot;
+        final Path diffDataFiles;
+        final Path diffMetaFiles;
 
         private WorkingDirectory(Path rootDir) {
             this.rootDir = rootDir;
-            oldJar = rootDir.resolve(PATH_OLD);
-            newJar = rootDir.resolve(PATH_NEW);
-            diff = rootDir.resolve(PATH_DIFF);
-            diffData = rootDir.resolve(PATH_DIFF_DATA);
-            diffMeta = rootDir.resolve(PATH_DIFF_META);
+            oldFiles = rootDir.resolve(PATH_OLD);
+            newFiles = rootDir.resolve(PATH_NEW);
+            diffRoot = rootDir.resolve(PATH_DIFF);
+            diffDataFiles = rootDir.resolve(PATH_DIFF_DATA);
+            diffMetaFiles = rootDir.resolve(PATH_DIFF_META);
         }
 
         static WorkingDirectory fromPath(Path rootDir) throws IOException {
@@ -364,14 +343,12 @@ final class FileUtils {
         }
 
         private void createDirectories() throws IOException {
-            Files.createDirectories(oldJar);
-            Files.createDirectories(newJar);
-            Files.createDirectories(diffData);
-            Files.createDirectories(diffMeta);
-        }
-
-        public boolean clear() {
-            return clearWorkingDirectory(rootDir);
+            Files.createDirectories(oldFiles);
+            Files.createDirectories(newFiles);
+            Files.createDirectories(diffDataFiles);
+            Files.createDirectories(diffMetaFiles);
         }
     }
+
+    record DiffMetaData(String diffHash, String oldHash, String newHash, String version) {}
 }

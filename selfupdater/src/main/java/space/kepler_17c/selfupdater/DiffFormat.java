@@ -20,12 +20,12 @@ public enum DiffFormat {
         this.applyFunction = applyFunction;
     }
 
-    static DiffFormat getFormatByVersion(int version) {
+    static DiffFormat getFormatByVersion(int version) throws SelfUpdaterException {
         switch (version) {
             case 1:
                 return V1;
             default:
-                return null;
+                throw new SelfUpdaterException("Not a valid version number: " + version);
         }
     }
 }

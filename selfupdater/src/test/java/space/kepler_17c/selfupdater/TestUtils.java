@@ -5,9 +5,13 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
@@ -23,14 +27,14 @@ public class TestUtils {
         throw new UnsupportedOperationException("static utility class");
     }
 
-    static <T> Object invokePrivateMethod(Class<T> typeClass, String methodName, Class<?>[] types, Object[] args) {
+    static <T> Object invokePrivateMethod(Class<T> typeClass, String methodName, Class<?>[] types, Object[] args)
+            throws SelfUpdaterException {
         try {
             Method declaredMethod = typeClass.getDeclaredMethod(methodName, types);
             declaredMethod.setAccessible(true);
             return declaredMethod.invoke(typeClass, args);
         } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
-            e.printStackTrace();
-            return null;
+            throw new SelfUpdaterException(e);
         }
     }
 
@@ -65,7 +69,7 @@ public class TestUtils {
         }
     }
 
-    static boolean equalZipFiles(Path a, Path b) {
+    static boolean equalZipFiles(Path a, Path b) throws IOException {
         try (ZipInputStream zisA = new ZipInputStream(Files.newInputStream(a));
                 ZipInputStream zisB = new ZipInputStream(Files.newInputStream(b))) {
             ZipEntry zeA;
@@ -76,38 +80,31 @@ public class TestUtils {
             int receivedB;
             while ((zeA = zisA.getNextEntry()) != null && (zeB = zisB.getNextEntry()) != null) {
                 if (!zeA.getName().equals(zeB.getName())) {
-                    System.err.println("Jar Comparison Failed: Mismatching names");
-                    return false;
+                    throw new SelfUpdaterException("Jar Comparison Failed: Mismatching names");
                 }
                 while ((receivedA = zisA.read(bufferA)) > 0 | (receivedB = zisB.read(bufferB)) > 0) {
                     if (receivedA != receivedB || Arrays.compare(bufferA, bufferB) != 0) {
-                        System.err.println("Jar Comparison Failed: Mismatching data");
                         byte[] subA = new byte[Math.max(receivedA, 0)];
                         byte[] subB = new byte[Math.max(receivedB, 0)];
                         System.arraycopy(bufferA, 0, subA, 0, Math.max(receivedA, 0));
                         System.arraycopy(bufferB, 0, subB, 0, Math.max(receivedB, 0));
-                        System.err.println(new String(subA));
-                        System.err.println(new String(subB));
-                        return false;
+                        throw new SelfUpdaterException("Jar Comparison Failed: Mismatching data\n\t" + new String(subA)
+                                + "\n\t" + new String(subB));
                     }
                 }
             }
             if (zisA.getNextEntry() != null || zisB.getNextEntry() != null) {
-                System.err.println("Jar Comparison Failed: Differing entry count");
-                return false;
+                throw new SelfUpdaterException("Jar Comparison Failed: Differing entry count");
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
         }
         return true;
     }
 
-    static void printJar(Path jar) {
+    static void printJar(Path jar) throws IOException {
         printJar(jar, System.out);
     }
 
-    static void printJar(Path jar, PrintStream printStream) {
+    static void printJar(Path jar, PrintStream printStream) throws IOException {
         try (InputStream inputStream = Files.newInputStream(jar);
                 ZipInputStream zis = new ZipInputStream(inputStream)) {
             ZipEntry ze;
@@ -115,10 +112,11 @@ public class TestUtils {
             byte[] buffer = new byte[maxPreviewLength];
             int bytesRead;
             byte[] croppedBuffer;
-            String printName = "### " + jar.getFileName() + " ###";
-            String border = pad("", "#", printName.length());
+            String header = "### Printing Jar  ### " + jar.getFileName() + " ###";
+            String footer = "### Done Printing ### " + jar.getFileName() + " ###";
+            String border = pad("", "#", header.length());
             printStream.println(border);
-            printStream.println(printName);
+            printStream.println(header);
             printStream.println(border);
             while ((ze = zis.getNextEntry()) != null) {
                 printStream.println("### " + ze + " ###");
@@ -131,9 +129,39 @@ public class TestUtils {
                 printStream.println(new String(croppedBuffer));
             }
             printStream.println(border);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            printStream.println(footer);
+            printStream.println(border);
         }
+    }
+
+    static void printDirectory(Path dir) throws IOException {
+        printDirectory(dir, System.out);
+    }
+
+    static void printDirectory(Path dir, PrintStream printStream) throws IOException {
+        String header = "### Printing Directory ### " + dir.getFileName() + " ###";
+        String footer = "### Done Printing      ### " + dir.getFileName() + " ###";
+        String border = pad("", "#", header.length());
+        printStream.println(border);
+        printStream.println(header);
+        printStream.println(border);
+        FileVisitor<Path> printVisitor = new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                printStream.println("### " + dir + " ###");
+                return super.preVisitDirectory(dir, attrs);
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                printStream.println("### " + file + " ###");
+                return super.visitFile(file, attrs);
+            }
+        };
+        Files.walkFileTree(dir, printVisitor);
+        printStream.println(border);
+        printStream.println(footer);
+        printStream.println(border);
     }
 
     static String pad(String base, String padSequence, int size) {

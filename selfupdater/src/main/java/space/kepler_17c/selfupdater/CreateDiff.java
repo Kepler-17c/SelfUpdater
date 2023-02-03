@@ -23,13 +23,16 @@ interface CreateDiff {
     Path createDiff(Path oldJar, Path newJar, Path outputDir) throws IOException;
 
     static Path v1(Path oldJar, Path newJar, Path outputDir) throws IOException {
-        WorkingDirectory workingDirectory;
         if (oldJar == null
                 || newJar == null
                 || outputDir == null
-                || (workingDirectory = FileUtils.prepareWorkingDirectory(oldJar, newJar, null)) == null) {
-            return null;
+                || !Files.isRegularFile(oldJar)
+                || !Files.isRegularFile(newJar)
+                || !Files.isDirectory(outputDir)) {
+            throw new IOException(
+                    "Arguments are required to be non-null and denote (in that order) a file, file, directory.");
         }
+        WorkingDirectory workingDirectory = FileUtils.prepareWorkingDirectory(oldJar, newJar, null);
         // check for moved files
         Map<Long, List<Path>> hashedFilesMap = new TreeMap<>();
         FileVisitor<Path> hashingFileVisitor = new SimpleFileVisitor<>() {
@@ -43,7 +46,7 @@ interface CreateDiff {
                 return super.visitFile(file, attrs);
             }
         };
-        Files.walkFileTree(workingDirectory.oldJar, hashingFileVisitor);
+        Files.walkFileTree(workingDirectory.oldFiles, hashingFileVisitor);
         List<Tuple2<String, String>> movedFiles = new ArrayList<>();
         FileVisitor<Path> comparingFileVisitor = new SimpleFileVisitor<>() {
             @Override
@@ -53,9 +56,9 @@ interface CreateDiff {
                     for (Path p : matchingFiles) {
                         if (FileUtils.equalFiles(file, p)) {
                             String relSrc =
-                                    workingDirectory.oldJar.relativize(p).toString();
+                                    workingDirectory.oldFiles.relativize(p).toString();
                             String relDest =
-                                    workingDirectory.newJar.relativize(file).toString();
+                                    workingDirectory.newFiles.relativize(file).toString();
                             movedFiles.add(new Tuple2<>(relSrc, relDest));
                             break;
                         }
@@ -64,7 +67,7 @@ interface CreateDiff {
                 return super.visitFile(file, attrs);
             }
         };
-        Files.walkFileTree(workingDirectory.newJar, comparingFileVisitor);
+        Files.walkFileTree(workingDirectory.newFiles, comparingFileVisitor);
         Set<String> movedDestFiles = new HashSet<>();
         for (Tuple2<String, String> filePair : movedFiles) {
             movedDestFiles.add(filePair.b());
@@ -72,22 +75,28 @@ interface CreateDiff {
         // check for deleted/changed/new files
         Stack<Path> oldFilesStack = new Stack<>();
         Stack<Path> newFilesStack = new Stack<>();
-        FileUtils.pushFilesReversed(oldFilesStack, workingDirectory.oldJar);
-        FileUtils.pushFilesReversed(newFilesStack, workingDirectory.newJar);
+        FileUtils.pushFilesReversed(oldFilesStack, workingDirectory.oldFiles);
+        FileUtils.pushFilesReversed(newFilesStack, workingDirectory.newFiles);
         Path oldFile;
         Path newFile;
         Path oldFileRel;
         Path newFileRel;
         Path diffFile;
         List<String> deletedFiles = new ArrayList<>();
-        Path diffTreeRoot = workingDirectory.diffData.resolve("tree");
+        Set<String> encounteredOldDirs = new HashSet<>();
+        Set<String> encounteredNewDirs = new HashSet<>();
+        Path diffTreeRoot = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.DATA_DIR);
         Files.createDirectories(diffTreeRoot);
         while (true) {
             // ensure top path denotes a file
             while (!oldFilesStack.isEmpty() && Files.isDirectory(oldFilesStack.peek())) {
+                encounteredOldDirs.add(
+                        FileUtils.normalisedDirString(workingDirectory.oldFiles.relativize(oldFilesStack.peek())));
                 FileUtils.pushFilesReversed(oldFilesStack, oldFilesStack.pop());
             }
             while (!newFilesStack.isEmpty() && Files.isDirectory(newFilesStack.peek())) {
+                encounteredNewDirs.add(
+                        FileUtils.normalisedDirString(workingDirectory.newFiles.relativize(oldFilesStack.peek())));
                 FileUtils.pushFilesReversed(newFilesStack, newFilesStack.pop());
             }
             // get references for comparison
@@ -101,24 +110,24 @@ interface CreateDiff {
                 // one stack is empty => handle remaining elements
                 if (oldFile == null) {
                     // only [old] is empty => add all new files
-                    diffFile = workingDirectory.newJar.relativize(newFile);
+                    diffFile = workingDirectory.newFiles.relativize(newFile);
                     if (!movedDestFiles.contains(diffFile.toString())) {
-                        diffFile = workingDirectory.diffData.resolve(diffFile);
+                        diffFile = workingDirectory.diffDataFiles.resolve(diffFile);
                         Files.createDirectories(diffFile.getParent());
                         Files.copy(newFile, diffFile);
                     }
                     newFilesStack.pop();
                 } else {
                     // only [new] is empty => mark all remaining as deleted
-                    diffFile = workingDirectory.oldJar.relativize(oldFile);
+                    diffFile = workingDirectory.oldFiles.relativize(oldFile);
                     deletedFiles.add(diffFile.toString());
                     oldFilesStack.pop();
                 }
                 continue;
             }
             // both stacks contain elements => compare files
-            oldFileRel = workingDirectory.oldJar.relativize(oldFile);
-            newFileRel = workingDirectory.newJar.relativize(newFile);
+            oldFileRel = workingDirectory.oldFiles.relativize(oldFile);
+            newFileRel = workingDirectory.newFiles.relativize(newFile);
             String oldRelString = oldFileRel.toString();
             String newRelString = newFileRel.toString();
             diffFile = diffTreeRoot.resolve(newFileRel);
@@ -145,30 +154,28 @@ interface CreateDiff {
                 throw new IOException("Working directory is being modified by another thread.");
             }
         }
-        Path deletedFilesMeta = workingDirectory.diffData.resolve("deletedFiles");
+        encounteredOldDirs.removeAll(encounteredNewDirs);
+        deletedFiles.addAll(encounteredOldDirs);
+        deletedFiles.sort(null);
+        Path deletedFilesMeta = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.META_DELETED);
         try (OutputStream outputStream = Files.newOutputStream(deletedFilesMeta)) {
             for (String line : deletedFiles) {
-                outputStream.write(line.replace("\\", "/").getBytes(StandardCharsets.UTF_8));
+                outputStream.write(FileUtils.normalisedPathString(line).getBytes(StandardCharsets.UTF_8));
                 outputStream.write('\n');
             }
         }
-        Path movedFilesMeta = workingDirectory.diffData.resolve("movedFiles");
+        Path movedFilesMeta = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.META_MOVED);
         try (OutputStream outputStream = Files.newOutputStream(movedFilesMeta)) {
             for (Tuple2<String, String> filePair : movedFiles) {
-                outputStream.write(filePair.a().replace("\\", "/").getBytes(StandardCharsets.UTF_8));
+                outputStream.write(FileUtils.normalisedPathString(filePair.a()).getBytes(StandardCharsets.UTF_8));
                 outputStream.write('\n');
-                outputStream.write(filePair.b().replace("\\", "/").getBytes(StandardCharsets.UTF_8));
+                outputStream.write(FileUtils.normalisedPathString(filePair.b()).getBytes(StandardCharsets.UTF_8));
                 outputStream.write('\n');
             }
         }
-        if (!FileUtils.generateMandatoryMetaFiles(workingDirectory, "1")) {
-            return null;
-        }
-        Path result = outputDir.resolve(FileUtils.getStrippedFileName(oldJar) + ".jardiff");
-        FileUtils.zipDir(workingDirectory.diff, result);
-        if (!workingDirectory.clear()) {
-            return null;
-        }
+        FileUtils.generateMandatoryMetaFiles(workingDirectory, DiffFormatConstantsV1.VERSION);
+        Path result = outputDir.resolve(FileUtils.getStrippedFileName(oldJar) + "." + FileUtils.DIFF_FILE_TYPE);
+        FileUtils.zipDir(workingDirectory.diffRoot, result);
         return result;
     }
 }

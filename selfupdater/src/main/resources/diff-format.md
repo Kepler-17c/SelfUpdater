@@ -9,9 +9,9 @@
       Exact content depends on the diff version.
     * `meta` contains all meta information of the diff.  
       All versions provide the following files:
-        * `diffHash` contains the SHA256 hex string of the diff file.
-        * `newHash` contains the SHA256 hex string of the updated file.
-        * `oldHash` contains the SHA256 hex string of the to be updated file.
+        * `diffHash` contains the SHA-256 hex string of the diff file.
+        * `newHash` contains the SHA-256 hex string of the updated file.
+        * `oldHash` contains the SHA-256 hex string of the to be updated file.
         * `version` contains the version number as string.
 
 With this the general file structure is:
