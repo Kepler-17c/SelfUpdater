@@ -96,7 +96,7 @@ interface CreateDiff {
             }
             while (!newFilesStack.isEmpty() && Files.isDirectory(newFilesStack.peek())) {
                 encounteredNewDirs.add(
-                        FileUtils.normalisedDirString(workingDirectory.newFiles.relativize(oldFilesStack.peek())));
+                        FileUtils.normalisedDirString(workingDirectory.newFiles.relativize(newFilesStack.peek())));
                 FileUtils.pushFilesReversed(newFilesStack, newFilesStack.pop());
             }
             // get references for comparison
@@ -112,7 +112,7 @@ interface CreateDiff {
                     // only [old] is empty => add all new files
                     diffFile = workingDirectory.newFiles.relativize(newFile);
                     if (!movedDestFiles.contains(diffFile.toString())) {
-                        diffFile = workingDirectory.diffDataFiles.resolve(diffFile);
+                        diffFile = diffTreeRoot.resolve(diffFile);
                         Files.createDirectories(diffFile.getParent());
                         Files.copy(newFile, diffFile);
                     }
@@ -153,6 +153,14 @@ interface CreateDiff {
             } else {
                 throw new IOException("Working directory is being modified by another thread.");
             }
+        }
+        for (String dir : encounteredNewDirs.stream()
+                .filter(d -> !encounteredOldDirs.contains(d))
+                .toList()) {
+            Files.createDirectories(workingDirectory
+                    .diffDataFiles
+                    .resolve(DiffFormatConstantsV1.DATA_DIR)
+                    .resolve(dir));
         }
         encounteredOldDirs.removeAll(encounteredNewDirs);
         deletedFiles.addAll(encounteredOldDirs);

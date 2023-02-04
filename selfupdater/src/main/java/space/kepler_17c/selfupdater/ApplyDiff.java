@@ -54,9 +54,15 @@ interface ApplyDiff {
         Path diffChangedFilesDir = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.DATA_DIR);
         FileVisitor<Path> diffCopyVisitor = new SimpleFileVisitor<>() {
             @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                Path copyTo = workingDirectory.newFiles.resolve(diffChangedFilesDir.relativize(dir));
+                Files.createDirectories(copyTo);
+                return super.preVisitDirectory(dir, attrs);
+            }
+
+            @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 Path copyTo = workingDirectory.newFiles.resolve(diffChangedFilesDir.relativize(file));
-                Files.createDirectories(copyTo.getParent());
                 Files.copy(file, copyTo, StandardCopyOption.REPLACE_EXISTING);
                 return super.visitFile(file, attrs);
             }

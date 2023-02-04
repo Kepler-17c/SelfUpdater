@@ -2,6 +2,7 @@ package space.kepler_17c.selfupdater;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -14,6 +15,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -80,7 +82,7 @@ public class TestUtils {
             int receivedB;
             while ((zeA = zisA.getNextEntry()) != null && (zeB = zisB.getNextEntry()) != null) {
                 if (!zeA.getName().equals(zeB.getName())) {
-                    throw new SelfUpdaterException("Jar Comparison Failed: Mismatching names");
+                    throw new SelfUpdaterException("Jar Comparison Failed: Mismatching names " + zeA + " & " + zeB);
                 }
                 while ((receivedA = zisA.read(bufferA)) > 0 | (receivedB = zisB.read(bufferB)) > 0) {
                     if (receivedA != receivedB || Arrays.compare(bufferA, bufferB) != 0) {
@@ -88,8 +90,8 @@ public class TestUtils {
                         byte[] subB = new byte[Math.max(receivedB, 0)];
                         System.arraycopy(bufferA, 0, subA, 0, Math.max(receivedA, 0));
                         System.arraycopy(bufferB, 0, subB, 0, Math.max(receivedB, 0));
-                        throw new SelfUpdaterException("Jar Comparison Failed: Mismatching data\n\t" + new String(subA)
-                                + "\n\t" + new String(subB));
+                        throw new SelfUpdaterException("Jar Comparison Failed: Mismatching data\n### " + zeA + " ###\n"
+                                + new String(subA) + "\n### " + zeB + " ###\n" + new String(subB));
                     }
                 }
             }
@@ -176,6 +178,36 @@ public class TestUtils {
             return padSequence.substring(padSequence.length() - missingLength) + padding + base;
         } else {
             return base + padding + padSequence.substring(0, missingLength);
+        }
+    }
+
+    static void generateRandomFileTree(
+            Path rootDir,
+            Random random,
+            int treeGenerationSteps,
+            int maxFileSize,
+            int fileNameVariability,
+            int fileWeight,
+            int dirWeight,
+            int stepOutWeight)
+            throws IOException {
+        Path activeDir = rootDir;
+        for (int i = 0; i < treeGenerationSteps; i++) {
+            int choice = random.nextInt(fileWeight + dirWeight + stepOutWeight);
+            if (choice < fileWeight) {
+                int size = random.nextInt(maxFileSize);
+                try (OutputStream outputStream =
+                        Files.newOutputStream(activeDir.resolve(Integer.toString(random.nextInt())))) {
+                    for (int n = 0; n < size; n++) {
+                        outputStream.write(random.nextInt(1 << Byte.SIZE));
+                    }
+                }
+            } else if (choice < fileWeight + dirWeight) {
+                activeDir = activeDir.resolve(Integer.toString(random.nextInt()));
+                Files.createDirectories(activeDir);
+            } else if (!rootDir.equals(activeDir)) {
+                activeDir = activeDir.getParent();
+            }
         }
     }
 }

@@ -59,11 +59,12 @@ Two files `deletedFiles` and `movedFiles` provide meta information, while `tree`
 | `deletedFiles` | Contains a list of files, separated by `\n` characters, that have to be deleted.                                              |
 | `movedFiles`   | Contains a list of move instructions, similar to `deletedFiles`: Lines alternate between "removed from" and "moved to" paths. |
 
-Above-mentioned tree is a subset of the updated file tree, only containing files that have been changed or were newly
-created.
-Moved files do not appear here, but are required to be copied from the old jar when the new jar is being compiled.
+Above-mentioned tree is a subset of the updated file tree.
+It only contains files and directories that have been changed or were newly created.
+This also includes empty directories in general or directories files will be moved to.
+Moved files do not appear here, but will be copied from the old jar when the new jar is being compiled.
 
-To simplify the structure, moved files' source locations are listed in `deletedFiles`.
+To simplify the structure, moved files and directories' source locations are listed in `deletedFiles`.
 This keeps deletion instructions in one place, instead of spreading it over multiple files.
 
 Combinations of moving and editing appear like two separate operations, because files are viewed as atomic objects:
