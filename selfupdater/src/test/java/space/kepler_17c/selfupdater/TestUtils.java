@@ -24,6 +24,12 @@ import static space.kepler_17c.selfupdater.FileUtils.equalFiles;
 public class TestUtils {
     private static final int READ_BUFFER_SIZE = 1 << 20; // 2^20 = 1 MiB
     public static final Path RESOURCES = Paths.get("src", "test", "resources");
+    public static final String ORIGINAL_FILE = "base.jar";
+    public static final String DIFF_FILE = "diff.jar";
+    public static final String UPDATED_FILE = "updated.jar";
+    public static final String ORIGINAL_DIR = "baseDir";
+    public static final String UPDATED_DIR = "updatedDir";
+    public static final String EXTRACTED_DIR = "extracted";
 
     private TestUtils() {
         throw new UnsupportedOperationException("static utility class");
