@@ -3,6 +3,8 @@ package space.kepler_17c.selfupdater;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.concurrent.atomic.AtomicBoolean;
 import space.kepler_17c.selfupdater.FileUtils.DiffMetaData;
 import space.kepler_17c.selfupdater.FileUtils.WorkingDirectory;
 
@@ -44,6 +46,41 @@ public final class SelfUpdater {
      */
     public static Path createDiff(Path oldJar, Path newJar, Path outputDir, DiffFormat diffFormat) throws IOException {
         return diffFormat.createFunction.createDiff(oldJar, newJar, outputDir);
+    }
+
+    /**
+     * Tries to update the running program using the given diff file.
+     * <p>
+     *     When applying the diff succeeded, the {@link UpdatePolicy} is checked, and replacing the running file is scheduled accordingly.
+     *     After the file is replaced, all update callbacks will be called.
+     * </p>
+     * @param diff to apply for the update.
+     * @return Whether updating succeeded.
+     */
+    public static boolean update(Path diff) {
+        if (diff == null || !Files.isRegularFile(diff)) {
+            return false;
+        }
+        Path updatedFile;
+        try {
+            updatedFile = applyDiff(diff, FileUtils.getRunningJarFile());
+        } catch (SelfUpdaterException e) {
+            return false;
+        }
+        AtomicBoolean result = new AtomicBoolean(true);
+        Runnable updateTask = () -> {
+            try {
+                Files.copy(updatedFile, FileUtils.getRunningJarFile(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                result.set(false);
+            }
+            UpdatePolicy.runUpdateCallbacks();
+        };
+        switch (updatePolicy) {
+            case ON_SHUTDOWN -> Runtime.getRuntime().addShutdownHook(new Thread(updateTask));
+            case WHEN_READY -> updateTask.run();
+        }
+        return result.get();
     }
 
     /**
