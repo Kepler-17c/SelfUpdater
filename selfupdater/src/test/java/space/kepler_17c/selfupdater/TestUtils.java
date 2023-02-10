@@ -42,7 +42,7 @@ public class TestUtils {
             declaredMethod.setAccessible(true);
             return declaredMethod.invoke(typeClass, args);
         } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
-            throw new SelfUpdaterException(e);
+            throw new SelfUpdaterException("Failed to call private method.", e);
         }
     }
 

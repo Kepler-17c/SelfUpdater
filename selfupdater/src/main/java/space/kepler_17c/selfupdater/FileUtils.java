@@ -82,16 +82,18 @@ final class FileUtils {
         return tmpDir;
     }
 
-    static WorkingDirectory prepareWorkingDirectory(Path oldJar, Path newJar, Path diff) throws IOException {
-        if (oldJar != null && !Files.isRegularFile(oldJar)
-                || newJar != null && !Files.isRegularFile(newJar)
-                || diff != null && !Files.isRegularFile(diff)) {
-            throw new IOException("Paths contain non-regular files.");
+    static WorkingDirectory prepareWorkingDirectory(Path oldJar, Path newJar, Path diff) throws SelfUpdaterException {
+        WorkingDirectory wd;
+        try {
+            wd = WorkingDirectory.fromPath(createTmpDir());
+            extractJar(oldJar, wd.oldFiles);
+            extractJar(newJar, wd.newFiles);
+            extractJar(diff, wd.diffRoot);
+            UpdaterEvent.triggerEvent(UpdaterEvent.EXTRACTED_DATA, true);
+        } catch (IOException e) {
+            UpdaterEvent.triggerEvent(UpdaterEvent.EXTRACTED_DATA, false);
+            throw new SelfUpdaterException("Failed to extract source files to working directory.", e);
         }
-        WorkingDirectory wd = WorkingDirectory.fromPath(createTmpDir());
-        extractJar(oldJar, wd.oldFiles);
-        extractJar(newJar, wd.newFiles);
-        extractJar(diff, wd.diffRoot);
         return wd;
     }
 
@@ -118,6 +120,9 @@ final class FileUtils {
     private static void extractJar(Path jar, Path targetDirectory) throws IOException {
         if (jar == null) {
             return;
+        }
+        if (!Files.isRegularFile(jar)) {
+            throw new SelfUpdaterException("Jar path must denote a regular file, but is " + jar);
         }
         if (!Files.isDirectory(targetDirectory)) {
             Files.createDirectories(targetDirectory);
@@ -189,17 +194,21 @@ final class FileUtils {
         }
     }
 
-    static DiffMetaData getDiffMetaData(WorkingDirectory workingDirectory) throws IOException {
+    static DiffMetaData getDiffMetaData(WorkingDirectory workingDirectory) throws SelfUpdaterException {
         Map<String, String> presentMetaData = new HashMap<>();
         List<Path> metaFiles;
         try (Stream<Path> pathStream = Files.list(workingDirectory.diffMetaFiles)) {
             metaFiles = pathStream.toList();
+        } catch (IOException e) {
+            throw new SelfUpdaterException("Failed to get list of meta file's paths.", e);
         }
         for (Path file : metaFiles) {
             try (InputStream inputStream = Files.newInputStream(file)) {
                 byte[] dataBytes = inputStream.readAllBytes();
                 String dataString = dataBytes == null ? null : new String(dataBytes);
                 presentMetaData.put(file.getFileName().toString(), dataString);
+            } catch (IOException e) {
+                throw new SelfUpdaterException("Failed to read meta file.", e);
             }
         }
         return new DiffMetaData(
@@ -232,13 +241,13 @@ final class FileUtils {
                 .collect(Collectors.joining());
     }
 
-    static String hashDirectory(Path dir) throws IOException {
+    static String hashDirectory(Path dir) throws SelfUpdaterException {
         MessageDigest sha256;
         try {
             sha256 = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
             // SHA-256 is required to be present on all implementations
-            throw new RuntimeException(e);
+            throw new SelfUpdaterException("Invalid JRE implementation.", e);
         }
         byte[] readBuffer = new byte[READ_BUFFER_SIZE];
         byte[] hashBytes;
@@ -259,6 +268,8 @@ final class FileUtils {
                     while ((bytesCount = inputStream.read(readBuffer)) > 0) {
                         sha256.update(readBuffer, 0, bytesCount);
                     }
+                } catch (IOException e) {
+                    throw new SelfUpdaterException("Failed to file for hash.", e);
                 }
             }
         }
@@ -269,12 +280,14 @@ final class FileUtils {
                 .collect(Collectors.joining());
     }
 
-    static void pushFilesReversed(Stack<Path> stack, Path dir) throws IOException {
+    static void pushFilesReversed(Stack<Path> stack, Path dir) throws SelfUpdaterException {
         if (dir == null || Files.isRegularFile(dir)) {
             return;
         }
         try (Stream<Path> pathStream = Files.list(dir)) {
             pathStream.sorted(Comparator.reverseOrder()).forEach(stack::push);
+        } catch (IOException e) {
+            throw new SelfUpdaterException("Failed to get file list.", e);
         }
     }
 

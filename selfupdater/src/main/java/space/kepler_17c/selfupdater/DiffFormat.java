@@ -28,4 +28,13 @@ public enum DiffFormat {
                 throw new SelfUpdaterException("Not a valid version number: " + version);
         }
     }
+
+    static boolean hasVersion(int version) {
+        try {
+            getFormatByVersion(version);
+            return true;
+        } catch (SelfUpdaterException e) {
+            return false;
+        }
+    }
 }
