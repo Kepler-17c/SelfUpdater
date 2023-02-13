@@ -31,7 +31,7 @@ public final class SelfUpdater {
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
      * @see #createDiff(Path, Path, Path, DiffFormat)
      */
-    public static Path createDiff(Path oldJar, Path newJar, Path outputDir) throws IOException {
+    public static Path createDiff(Path oldJar, Path newJar, Path outputDir) {
         return createDiff(oldJar, newJar, outputDir, DiffFormat.LATEST);
     }
 
@@ -44,8 +44,13 @@ public final class SelfUpdater {
      * @param diffFormat Diff format to be used.
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
      */
-    public static Path createDiff(Path oldJar, Path newJar, Path outputDir, DiffFormat diffFormat) throws IOException {
-        return diffFormat.createFunction.createDiff(oldJar, newJar, outputDir);
+    public static Path createDiff(Path oldJar, Path newJar, Path outputDir, DiffFormat diffFormat) {
+        try {
+            return diffFormat.createFunction.createDiff(oldJar, newJar, outputDir);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     /**

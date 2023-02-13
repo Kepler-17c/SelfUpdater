@@ -2,6 +2,7 @@ package space.kepler_17c.selfupdater;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -17,10 +18,15 @@ public enum UpdaterEvent {
 
     private static final Map<UpdaterEvent, Set<Consumer<Boolean>>> REGISTERED_CALLBACKS = new HashMap<>();
 
+    static {
+        for (UpdaterEvent event : UpdaterEvent.values()) {
+            REGISTERED_CALLBACKS.put(event, new HashSet<>());
+        }
+    }
+
     static void triggerEvent(UpdaterEvent updaterEvent, boolean value) {
         if (value) {
             REGISTERED_CALLBACKS.get(updaterEvent).forEach(e -> e.accept(true));
-            ;
         } else {
             UpdaterEvent[] events = UpdaterEvent.values();
             int start = Arrays.asList(events).indexOf(updaterEvent);
