@@ -112,8 +112,9 @@ public final class SelfUpdater {
             UpdaterEvent.triggerEvent(UpdaterEvent.CHECKED_VERSION, false);
             throw new SelfUpdaterException("Version string doesn't represent a known version: " + metaData.version());
         }
-        if (metaData.diffHash().equals(FileUtils.hashDirectory(workingDirectory.diffDataFiles))
-                && metaData.oldHash().equals(FileUtils.hashDirectory(workingDirectory.oldFiles))) {
+        String diffHashActual = FileUtils.hashDirectory(workingDirectory.diffDataFiles);
+        String oldHashActual = FileUtils.hashDirectory(workingDirectory.oldFiles);
+        if (metaData.diffHash().equals(diffHashActual) && metaData.oldHash().equals(oldHashActual)) {
             UpdaterEvent.triggerEvent(UpdaterEvent.VERIFIED_HASHES, true);
         } else {
             UpdaterEvent.triggerEvent(UpdaterEvent.VERIFIED_HASHES, false);
