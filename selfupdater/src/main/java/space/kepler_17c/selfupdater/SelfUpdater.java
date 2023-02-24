@@ -64,12 +64,14 @@ public final class SelfUpdater {
      */
     public static boolean update(Path diff) {
         if (diff == null || !Files.isRegularFile(diff)) {
+            UpdaterEvent.triggerEvent(UpdaterEvent.RECEIVED_DIFF, false);
             return false;
         }
         Path updatedFile;
         try {
             updatedFile = applyDiff(diff, FileUtils.getRunningJarFile());
         } catch (SelfUpdaterException e) {
+            e.printStackTrace();
             return false;
         }
         AtomicBoolean result = new AtomicBoolean(true);
