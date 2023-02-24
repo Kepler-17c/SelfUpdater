@@ -16,9 +16,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
@@ -26,6 +28,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -44,6 +47,35 @@ final class FileUtils {
     private static final String PATH_DIFF_META = PATH_DIFF + "meta/";
     static final String DIFF_FILE_TYPE = "jardiff";
     static final String UPDATED_FILE_NAME = "updated.jar";
+
+    /**
+     * A list of registered magic bytes to identify jar files.
+     * <p>
+     *     The list index stands for the offset at which the magic bytes start.
+     *     Each index carries a (potentially empty) collection of byte sequences for that offset.
+     * </p>
+     */
+    static final List<Collection<List<Integer>>> JAR_FILE_MAGIC_BYTES = new ArrayList<>();
+
+    static {
+        // for now this only registers jar/zip files for uncompressed nesting
+        // tuples of offset and magic bytes
+        List<Tuple2<Integer, String>> knownMagicBytes = new ArrayList<>();
+        // zip and related
+        knownMagicBytes.add(new Tuple2<>(0, "50 4B 03 04"));
+        knownMagicBytes.add(new Tuple2<>(0, "50 4B 05 06"));
+        knownMagicBytes.add(new Tuple2<>(0, "50 4B 07 08"));
+        for (Tuple2<Integer, String> pair : knownMagicBytes) {
+            while (JAR_FILE_MAGIC_BYTES.size() <= pair.a()) {
+                JAR_FILE_MAGIC_BYTES.add(new HashSet<>());
+            }
+            JAR_FILE_MAGIC_BYTES
+                    .get(pair.a())
+                    .add(Arrays.stream(pair.b().split(" "))
+                            .map(s -> Integer.parseInt(s, 16))
+                            .toList());
+        }
+    }
 
     static {
         // clear working from the previous run on launch
@@ -167,17 +199,50 @@ final class FileUtils {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 String pathString = normalisedPathString(sourceDirectory.relativize(file), false);
+                byte[] data;
+                try (InputStream inputStream = Files.newInputStream(file)) {
+                    data = inputStream.readAllBytes();
+                }
                 ZipEntry ze = new ZipEntry(pathString);
+                if (isCompressedFile(file)) {
+                    ze.setMethod(ZipEntry.STORED);
+                    ze.setSize(data.length);
+                    ze.setCompressedSize(data.length);
+                    CRC32 crc = new CRC32();
+                    crc.update(data);
+                    ze.setCrc(crc.getValue());
+                }
                 zos.putNextEntry(ze);
-                InputStream inputStream = Files.newInputStream(file);
-                zos.write(inputStream.readAllBytes());
-                inputStream.close();
+                zos.write(data);
                 zos.closeEntry();
                 return FileVisitResult.CONTINUE;
             }
         };
         Files.walkFileTree(sourceDirectory, zipWritingFileVisitor);
         zos.close();
+    }
+
+    private static boolean isCompressedFile(Path file) throws SelfUpdaterException {
+        List<Integer> byteBuffer = new ArrayList<>();
+        try (InputStream input = Files.newInputStream(file)) {
+            for (Collection<List<Integer>> offsetGroup : JAR_FILE_MAGIC_BYTES) {
+                for (List<Integer> byteSequence : offsetGroup) {
+                    while (byteBuffer.size() < Math.max(byteSequence.size(), 1)) {
+                        byteBuffer.add(input.read());
+                    }
+                    boolean foundMatch = IntStream.range(0, byteSequence.size())
+                            .mapToObj(i -> byteSequence.get(i).equals(byteBuffer.get(i)))
+                            .reduce(true, Boolean::logicalAnd);
+                    if (foundMatch) {
+                        return true;
+                    }
+                }
+                byteBuffer.remove(0);
+            }
+        } catch (IOException e) {
+            throw new SelfUpdaterException(e);
+        }
+        return false;
     }
 
     static void generateMandatoryMetaFiles(WorkingDirectory workingDirectory, String version) throws IOException {
