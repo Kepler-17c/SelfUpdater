@@ -351,8 +351,10 @@ final class FileUtils {
         if (dir == null || Files.isRegularFile(dir)) {
             return;
         }
+        // this special comparator is necessary due to system dependent behaviour in path comparisons
+        Comparator<Path> reverseComparator = (a, b) -> normalisedPathString(b).compareTo(normalisedPathString(a));
         try (Stream<Path> pathStream = Files.list(dir)) {
-            pathStream.sorted(Comparator.reverseOrder()).forEach(stack::push);
+            pathStream.sorted(reverseComparator).forEach(stack::push);
         } catch (IOException e) {
             throw new SelfUpdaterException("Failed to get file list.", e);
         }
