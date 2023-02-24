@@ -37,7 +37,7 @@ interface ApplyDiff {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                 Path relDir = workingDirectory.oldFiles.relativize(dir);
-                if (!deletedFiles.contains(FileUtils.normalisedDirString(relDir))) {
+                if (!deletedFiles.contains(FileUtils.normalisedPathString(relDir, true))) {
                     Files.createDirectories(workingDirectory.newFiles.resolve(relDir));
                 }
                 return super.preVisitDirectory(dir, attrs);
@@ -46,7 +46,7 @@ interface ApplyDiff {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 Path relFile = workingDirectory.oldFiles.relativize(file);
-                if (!deletedFiles.contains(FileUtils.normalisedPathString(relFile))) {
+                if (!deletedFiles.contains(FileUtils.normalisedPathString(relFile, false))) {
                     Files.copy(file, workingDirectory.newFiles.resolve(relFile));
                 }
                 return super.visitFile(file, attrs);

@@ -90,12 +90,12 @@ interface CreateDiff {
             // ensure top path denotes a file
             while (!oldFilesStack.isEmpty() && Files.isDirectory(oldFilesStack.peek())) {
                 encounteredOldDirs.add(
-                        FileUtils.normalisedDirString(workingDirectory.oldFiles.relativize(oldFilesStack.peek())));
+                        FileUtils.normalisedPathString(workingDirectory.oldFiles.relativize(oldFilesStack.peek())));
                 FileUtils.pushFilesReversed(oldFilesStack, oldFilesStack.pop());
             }
             while (!newFilesStack.isEmpty() && Files.isDirectory(newFilesStack.peek())) {
                 encounteredNewDirs.add(
-                        FileUtils.normalisedDirString(workingDirectory.newFiles.relativize(newFilesStack.peek())));
+                        FileUtils.normalisedPathString(workingDirectory.newFiles.relativize(newFilesStack.peek())));
                 FileUtils.pushFilesReversed(newFilesStack, newFilesStack.pop());
             }
             // get references for comparison
@@ -167,16 +167,18 @@ interface CreateDiff {
         Path deletedFilesMeta = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.META_DELETED);
         try (OutputStream outputStream = Files.newOutputStream(deletedFilesMeta)) {
             for (String line : deletedFiles) {
-                outputStream.write(FileUtils.normalisedPathString(line).getBytes(StandardCharsets.UTF_8));
+                outputStream.write(FileUtils.normalisedPathString(line, false).getBytes(StandardCharsets.UTF_8));
                 outputStream.write('\n');
             }
         }
         Path movedFilesMeta = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.META_MOVED);
         try (OutputStream outputStream = Files.newOutputStream(movedFilesMeta)) {
             for (Tuple2<String, String> filePair : movedFiles) {
-                outputStream.write(FileUtils.normalisedPathString(filePair.a()).getBytes(StandardCharsets.UTF_8));
+                outputStream.write(
+                        FileUtils.normalisedPathString(filePair.a(), false).getBytes(StandardCharsets.UTF_8));
                 outputStream.write('\n');
-                outputStream.write(FileUtils.normalisedPathString(filePair.b()).getBytes(StandardCharsets.UTF_8));
+                outputStream.write(
+                        FileUtils.normalisedPathString(filePair.b(), false).getBytes(StandardCharsets.UTF_8));
                 outputStream.write('\n');
             }
         }

@@ -157,7 +157,7 @@ final class FileUtils {
                 if (pathString.isEmpty()) {
                     return FileVisitResult.CONTINUE;
                 }
-                pathString = normalisedDirString(pathString);
+                pathString = normalisedPathString(pathString, true);
                 ZipEntry ze = new ZipEntry(pathString);
                 zos.putNextEntry(ze);
                 zos.closeEntry();
@@ -166,7 +166,7 @@ final class FileUtils {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                String pathString = normalisedPathString(sourceDirectory.relativize(file));
+                String pathString = normalisedPathString(sourceDirectory.relativize(file), false);
                 ZipEntry ze = new ZipEntry(pathString);
                 zos.putNextEntry(ze);
                 InputStream inputStream = Files.newInputStream(file);
@@ -261,7 +261,7 @@ final class FileUtils {
         while (!fileStack.isEmpty()) {
             absPath = fileStack.pop();
             relPath = dir.relativize(absPath);
-            pathString = Files.isDirectory(absPath) ? normalisedDirString(relPath) : normalisedPathString(relPath);
+            pathString = normalisedPathString(relPath, Files.isDirectory(absPath));
             sha256.update(pathString.getBytes(StandardCharsets.UTF_8));
             if (Files.isDirectory(absPath)) {
                 pushFilesReversed(fileStack, absPath);
@@ -311,27 +311,26 @@ final class FileUtils {
 
     static String getStrippedFileName(Path file) {
         String rawName = file.getFileName().toString();
-        return rawName.substring(0, rawName.lastIndexOf("."));
+        return rawName.substring(0, Math.max(rawName.lastIndexOf("."), 0));
     }
 
     static String normalisedPathString(Path path) {
-        return normalisedPathString(path.toString());
+        return normalisedPathString(path, Files.isDirectory(path));
     }
 
-    static String normalisedPathString(String path) {
-        return path.replace("\\", "/");
+    static String normalisedPathString(Path path, boolean isDirectory) {
+        return normalisedPathString(path.toString(), isDirectory);
     }
 
-    static String normalisedDirString(Path dir) {
-        return normalisedDirString(dir.toString());
-    }
-
-    static String normalisedDirString(String dir) {
-        String normalised = normalisedPathString(dir);
-        if (!normalised.endsWith("/")) {
-            normalised += "/";
+    static String normalisedPathString(String path, boolean isDirectory) {
+        String normalisedString = path.replace("\\", "/");
+        if (!isDirectory && normalisedString.endsWith("/")) {
+            return normalisedString.substring(0, normalisedString.length() - 1);
+        } else if (isDirectory && !normalisedString.endsWith("/")) {
+            return normalisedString + "/";
+        } else {
+            return normalisedString;
         }
-        return normalised;
     }
 
     static final class WorkingDirectory {
