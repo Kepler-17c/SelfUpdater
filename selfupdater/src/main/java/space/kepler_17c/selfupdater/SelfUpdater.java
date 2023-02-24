@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.concurrent.atomic.AtomicBoolean;
 import space.kepler_17c.selfupdater.FileUtils.DiffMetaData;
 import space.kepler_17c.selfupdater.FileUtils.WorkingDirectory;
 
@@ -74,12 +73,11 @@ public final class SelfUpdater {
             e.printStackTrace();
             return false;
         }
-        AtomicBoolean result = new AtomicBoolean(true);
         Runnable updateTask = () -> {
             try {
                 Files.copy(updatedFile, FileUtils.getRunningJarFile(), StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException e) {
-                result.set(false);
+                e.printStackTrace();
             }
             UpdatePolicy.runUpdateCallbacks();
         };
@@ -87,7 +85,7 @@ public final class SelfUpdater {
             case ON_SHUTDOWN -> Runtime.getRuntime().addShutdownHook(new Thread(updateTask));
             case WHEN_READY -> updateTask.run();
         }
-        return result.get();
+        return true;
     }
 
     /**
