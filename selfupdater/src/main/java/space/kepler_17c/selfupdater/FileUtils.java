@@ -72,7 +72,7 @@ final class FileUtils {
         return Path.of(jarUri);
     }
 
-    public static Path getSystemTmpDir() {
+    private static Path getSystemTmpDir() {
         return Path.of(System.getProperty("java.io.tmpdir"));
     }
 

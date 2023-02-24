@@ -97,7 +97,7 @@ public final class SelfUpdater {
      * @param jar  Location of the file to be updated.
      * @return The location of the updated jar file if all operations succeeded, {@code null} otherwise.
      */
-    private static Path applyDiff(Path diff, Path jar) throws SelfUpdaterException {
+    public static Path applyDiff(Path diff, Path jar) throws SelfUpdaterException {
         if (diff != null && Files.isRegularFile(diff)) {
             UpdaterEvent.triggerEvent(UpdaterEvent.RECEIVED_DIFF, true);
         } else {
