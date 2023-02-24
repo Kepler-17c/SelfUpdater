@@ -54,11 +54,10 @@ interface CreateDiff {
                 List<Path> matchingFiles = hashedFilesMap.get(attrs.size());
                 if (matchingFiles != null) {
                     for (Path p : matchingFiles) {
-                        if (FileUtils.equalFiles(file, p)) {
-                            String relSrc =
-                                    workingDirectory.oldFiles.relativize(p).toString();
-                            String relDest =
-                                    workingDirectory.newFiles.relativize(file).toString();
+                        String relSrc = workingDirectory.oldFiles.relativize(p).toString();
+                        String relDest =
+                                workingDirectory.newFiles.relativize(file).toString();
+                        if (!relSrc.equals(relDest) && FileUtils.equalFiles(file, p)) {
                             movedFiles.add(new Tuple2<>(relSrc, relDest));
                             break;
                         }
