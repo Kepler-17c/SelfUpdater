@@ -68,8 +68,10 @@ final class FileUtils {
 
     static Path getRunningJarFile() {
         URL jarUrl = FileUtils.class.getProtectionDomain().getCodeSource().getLocation();
-        URI jarUri = URI.create(jarUrl.toString());
-        return Path.of(jarUri);
+        String jarUriString = URI.create(jarUrl.toString()).toString();
+        int cutStart = Math.max(jarUriString.lastIndexOf(':') + 1, 0);
+        int cutEnd = jarUriString.indexOf('!');
+        return Path.of(cutEnd < 0 ? jarUriString.substring(cutStart) : jarUriString.substring(cutStart, cutEnd));
     }
 
     private static Path getSystemTmpDir() {
