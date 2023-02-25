@@ -10,12 +10,14 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 import space.kepler_17c.selfupdater.FileUtils.WorkingDirectory;
 import space.kepler_17c.selfupdater.MiscUtils.Tuple2;
 
@@ -89,13 +91,13 @@ interface CreateDiff {
         while (true) {
             // ensure top path denotes a file
             while (!oldFilesStack.isEmpty() && Files.isDirectory(oldFilesStack.peek())) {
-                encounteredOldDirs.add(
-                        FileUtils.normalisedPathString(workingDirectory.oldFiles.relativize(oldFilesStack.peek())));
+                encounteredOldDirs.add(FileUtils.normalisedPathString(
+                        workingDirectory.oldFiles.relativize(oldFilesStack.peek()), true));
                 FileUtils.pushFilesReversed(oldFilesStack, oldFilesStack.pop());
             }
             while (!newFilesStack.isEmpty() && Files.isDirectory(newFilesStack.peek())) {
-                encounteredNewDirs.add(
-                        FileUtils.normalisedPathString(workingDirectory.newFiles.relativize(newFilesStack.peek())));
+                encounteredNewDirs.add(FileUtils.normalisedPathString(
+                        workingDirectory.newFiles.relativize(newFilesStack.peek()), true));
                 FileUtils.pushFilesReversed(newFilesStack, newFilesStack.pop());
             }
             // get references for comparison
@@ -119,7 +121,7 @@ interface CreateDiff {
                 } else {
                     // only [new] is empty => mark all remaining as deleted
                     diffFile = workingDirectory.oldFiles.relativize(oldFile);
-                    deletedFiles.add(diffFile.toString());
+                    deletedFiles.add(FileUtils.normalisedPathString(diffFile, false));
                     oldFilesStack.pop();
                 }
                 continue;
@@ -132,7 +134,7 @@ interface CreateDiff {
             diffFile = diffTreeRoot.resolve(newFileRel);
             if (oldRelString.compareTo(newRelString) < 0) {
                 // [old] is before [new] alphabetically => [new] skipped a file => mark as deleted
-                deletedFiles.add(oldRelString);
+                deletedFiles.add(FileUtils.normalisedPathString(oldRelString, false));
                 oldFilesStack.pop();
             } else if (oldRelString.compareTo(newRelString) > 0) {
                 // [old] is after [new] alphabetically => [old] skipped a file => add new file
@@ -167,11 +169,13 @@ interface CreateDiff {
         Path deletedFilesMeta = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.META_DELETED);
         try (OutputStream outputStream = Files.newOutputStream(deletedFilesMeta)) {
             for (String line : deletedFiles) {
-                outputStream.write(FileUtils.normalisedPathString(line, false).getBytes(StandardCharsets.UTF_8));
+                outputStream.write(line.getBytes(StandardCharsets.UTF_8));
                 outputStream.write('\n');
             }
         }
         Path movedFilesMeta = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.META_MOVED);
+        movedFiles.sort(
+                Comparator.comparing((Tuple2<String, String> a) -> a.a()).thenComparing(Tuple2::b));
         try (OutputStream outputStream = Files.newOutputStream(movedFilesMeta)) {
             for (Tuple2<String, String> filePair : movedFiles) {
                 outputStream.write(
