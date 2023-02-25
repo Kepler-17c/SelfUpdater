@@ -79,4 +79,11 @@ public class DiffV1Test {
         Assertions.assertTrue(
                 TestUtils.equalZipFiles(RESOURCES.resolve(testDir).resolve(UPDATED_FILE), generatedUpdate));
     }
+
+    @Test
+    public void noChangesDiff() {
+        Path jar = RESOURCES.resolve(SINGLE_MOVE_TEST_DIR).resolve(ORIGINAL_FILE);
+        Path diff = SelfUpdater.createDiff(jar, jar, tmpDir, DiffFormat.V1);
+        Assertions.assertNull(diff);
+    }
 }

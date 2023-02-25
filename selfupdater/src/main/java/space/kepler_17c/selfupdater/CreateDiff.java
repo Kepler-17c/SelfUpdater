@@ -165,6 +165,15 @@ interface CreateDiff {
         }
         encounteredOldDirs.removeAll(encounteredNewDirs);
         deletedFiles.addAll(encounteredOldDirs);
+        // check for empty diff
+        boolean emptyDiffTree;
+        try (Stream<Path> diffTreeFiles = Files.list(diffTreeRoot)) {
+            emptyDiffTree = diffTreeFiles.findAny().isEmpty();
+        }
+        if (emptyDiffTree && deletedFiles.isEmpty() && movedFiles.isEmpty()) {
+            throw new SelfUpdaterException("Diff is empty, because the given files are equal.");
+        }
+        // write meta-data for deleted and moved files
         deletedFiles.sort(null);
         Path deletedFilesMeta = workingDirectory.diffDataFiles.resolve(DiffFormatConstantsV1.META_DELETED);
         try (OutputStream outputStream = Files.newOutputStream(deletedFilesMeta)) {
