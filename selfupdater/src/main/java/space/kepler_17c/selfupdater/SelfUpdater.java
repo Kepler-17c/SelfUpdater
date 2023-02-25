@@ -8,7 +8,15 @@ import space.kepler_17c.selfupdater.FileUtils.DiffMetaData;
 import space.kepler_17c.selfupdater.FileUtils.WorkingDirectory;
 
 /**
- * This is the interface of the library providing access to all functionality.
+ * This is the main interface of the library.
+ * <p>
+ *     Functionality accessible from here includes:
+ *     <ul>
+ *         <li><i>createDiff</i> &#8211; Generate a diff from two jar files.</li>
+ *         <li><i>applyDiff</i> &#8211; Apply a diff to a jar file.</li>
+ *         <li><i>update</i> &#8211; Add some automation around application of the diff.</li>
+ *     </ul>
+ * </p>
  */
 public final class SelfUpdater {
     /**
@@ -27,7 +35,9 @@ public final class SelfUpdater {
      * @param oldJar    Location of the old version.
      * @param newJar    Location of the target version.
      * @param outputDir Directory where the diff will be written to.
+     *
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
+     *
      * @see #createDiff(Path, Path, Path, DiffFormat)
      */
     public static Path createDiff(Path oldJar, Path newJar, Path outputDir) {
@@ -41,7 +51,10 @@ public final class SelfUpdater {
      * @param newJar     Location of the target version.
      * @param outputDir  Directory where the diff shall be written to.
      * @param diffFormat Diff format to be used.
+     *
      * @return The location of the diff file if all operations succeeded, {@code null} otherwise.
+     *
+     * @see #createDiff(Path, Path, Path)
      */
     public static Path createDiff(Path oldJar, Path newJar, Path outputDir, DiffFormat diffFormat) {
         try {
@@ -55,37 +68,32 @@ public final class SelfUpdater {
     /**
      * Tries to update the running program using the given diff file.
      * <p>
-     *     When applying the diff succeeded, the {@link UpdatePolicy} is checked, and replacing the running file is scheduled accordingly.
-     *     After the file is replaced, all update callbacks will be called.
+     *     When applying the diff succeeded (uses {@link SelfUpdater#applyDiff(Path, Path)}),
+     *     the {@link UpdatePolicy} set via {@link SelfUpdater#setUpdatePolicy(UpdatePolicy)} is checked,
+     *     and replacing the running file is scheduled accordingly.
+     *     After the file is replaced, all update callbacks registered via {@link UpdatePolicy} will be called.
      * </p>
+     *
      * @param diff to apply for the update.
-     * @return Whether updating succeeded.
      */
-    public static boolean update(Path diff) {
+    public static void update(Path diff) throws SelfUpdaterException {
         if (diff == null || !Files.isRegularFile(diff)) {
             UpdaterEvent.triggerEvent(UpdaterEvent.RECEIVED_DIFF, false);
-            return false;
+            throw new SelfUpdaterException("The given path doesn't denote a file: " + diff);
         }
-        Path updatedFile;
-        try {
-            updatedFile = applyDiff(diff, FileUtils.getRunningJarFile());
-        } catch (SelfUpdaterException e) {
-            e.printStackTrace();
-            return false;
-        }
+        Path updatedFile = applyDiff(diff, FileUtils.getRunningJarFile());
         Runnable updateTask = () -> {
             try {
                 Files.copy(updatedFile, FileUtils.getRunningJarFile(), StandardCopyOption.REPLACE_EXISTING);
+                UpdatePolicy.runUpdateCallbacks();
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            UpdatePolicy.runUpdateCallbacks();
         };
         switch (updatePolicy) {
             case ON_SHUTDOWN -> Runtime.getRuntime().addShutdownHook(new Thread(updateTask));
             case WHEN_READY -> updateTask.run();
         }
-        return true;
     }
 
     /**
@@ -93,7 +101,13 @@ public final class SelfUpdater {
      *
      * @param diff Location of the diff to be applied.
      * @param jar  Location of the file to be updated.
-     * @return The location of the updated jar file if all operations succeeded, {@code null} otherwise.
+     *
+     * @return The location of the updated jar file.
+     *
+     * @throws SelfUpdaterException When any stage of applying the diff failed.
+     * Subscribe to {@link UpdaterEvent} channels for status updates.
+     *
+     * @see #update(Path)
      */
     public static Path applyDiff(Path diff, Path jar) throws SelfUpdaterException {
         if (diff != null && Files.isRegularFile(diff)) {
@@ -134,6 +148,7 @@ public final class SelfUpdater {
      * Changes the update policy.
      *
      * @param newPolicy The new policy.
+     *
      * @return The old policy.
      */
     public static UpdatePolicy setUpdatePolicy(UpdatePolicy newPolicy) {

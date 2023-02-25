@@ -18,12 +18,24 @@ public enum UpdatePolicy {
 
     private static final Set<Runnable> UPDATE_CALLBACKS = new HashSet<>();
 
+    /**
+     * Register a function to be called after an update has been applied successfully.
+     *
+     * @param callback The function to be executed.
+     */
     public static void registerUpdateCallback(Runnable callback) {
         UPDATE_CALLBACKS.add(callback);
     }
 
-    public static void removeUpdateCallback(Runnable callback) {
-        UPDATE_CALLBACKS.remove(callback);
+    /**
+     * Remove a previously registered callback function.
+     *
+     * @param callback The function to be removed.
+     *
+     * @return Whether removing the function succeeded.
+     */
+    public static boolean removeUpdateCallback(Runnable callback) {
+        return UPDATE_CALLBACKS.remove(callback);
     }
 
     static void runUpdateCallbacks() {

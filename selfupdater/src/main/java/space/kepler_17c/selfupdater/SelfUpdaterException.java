@@ -3,9 +3,9 @@ package space.kepler_17c.selfupdater;
 import java.io.IOException;
 
 /**
- * Library exception for all failures related to internal requirements.
+ * Library exception for all failures related to internal requirements and operations.
  */
-public class SelfUpdaterException extends IOException {
+public final class SelfUpdaterException extends IOException {
     SelfUpdaterException() {
         super();
     }
